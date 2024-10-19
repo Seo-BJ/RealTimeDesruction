@@ -25,7 +25,7 @@ void CVT::Lloyd_Algo(TArray<FVector>& InputSites)
 
 void CVT::GetVertexDataFromStaticMeshComponent(const UStaticMeshComponent* StaticMeshComponent)
 {
-	FPositionVertexBuffer* VertexBuffer = &StaticMeshComponent->GetStaticMesh()->GetRenderData()->LODResources[0].VertexBuffers.PositionVertexBuffer;
+    FPositionVertexBuffer* VertexBuffer = &StaticMeshComponent->GetStaticMesh()->GetRenderData()->LODResources[0].VertexBuffers.PositionVertexBuffer;
     if (VertexBuffer)
     {
         const int32 VertexCount = VertexBuffer->GetNumVertices();

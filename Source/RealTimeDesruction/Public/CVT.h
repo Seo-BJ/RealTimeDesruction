@@ -8,7 +8,7 @@
 #include "Engine/StaticMesh.h"
 
 /**
- * 
+ *
  */
 class CVT
 {
