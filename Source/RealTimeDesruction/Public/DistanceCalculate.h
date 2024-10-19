@@ -4,9 +4,10 @@
 #include <limits>
 #include <functional>
 #include <vector>
+#include <atomic>
+#include <shared_mutex>
 #include "CoreMinimal.h"
 #include "WeightedGraph.h"
-#include "HAL/CriticalSection.h"
 #include "Async/ParallelFor.h"
 
 struct DistOutEntry
@@ -20,11 +21,11 @@ class REALTIMEDESRUCTION_API DistanceCalculate
 public:
 	DistanceCalculate() {};
 
-	TMap<int32, double> Calculate(WeightedGraph& graph, const TArray<int32>& Sources, const int& k);
+	TMap<int32, DistOutEntry> Calculate(WeightedGraph& graph, const TArray<int32>& Sources, const int& k);
 
 	~DistanceCalculate() = default;
 
 private:
-	double recalculateDistance(WeightedGraph& graph, const int32& u, int32& v, TMap<int32, double>& Dist, TMap<int32, int32>& Pred, const int& k);
-	int32 getPredecessor(const int32& vertex, const TMap<int32, int32>& Pred);
+	double recalculateDistance(WeightedGraph& graph, const int32& u, const int32& v, const TArray<int32>& Vertices, const double& Dist, const TMap<int32, TUniquePtr<std::atomic<int32>>>& Pred, const int& k);
+	int32 getPredecessor(const int32& vertex, const TMap<int32, TUniquePtr<std::atomic<int32>>>& Pred);
 };
