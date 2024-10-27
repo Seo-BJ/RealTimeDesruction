@@ -13,7 +13,7 @@
 struct DistOutEntry
 {
 	double Weight;
-	int32 Source;
+	uint32 Source;
 };
 
 class REALTIMEDESRUCTION_API DistanceCalculate
@@ -21,11 +21,11 @@ class REALTIMEDESRUCTION_API DistanceCalculate
 public:
 	DistanceCalculate() {};
 
-	TMap<int32, DistOutEntry> Calculate(WeightedGraph& graph, const TArray<int32>& Sources, const int& k);
+	TMap<uint32, DistOutEntry> Calculate(WeightedGraph& graph, const TArray<uint32>& Sources, const int& k);
 
 	~DistanceCalculate() = default;
 
 private:
-	double recalculateDistance(WeightedGraph& graph, const int32& u, const int32& v, const TArray<int32>& Vertices, const double& Dist, const TMap<int32, TUniquePtr<std::atomic<int32>>>& Pred, const int& k);
-	int32 getPredecessor(const int32& vertex, const TMap<int32, TUniquePtr<std::atomic<int32>>>& Pred);
+	double recalculateDistance(WeightedGraph& graph, const uint32& u, const uint32& v, const double& Dist, const TMap<uint32, TUniquePtr<std::atomic<uint32>>>& Pred, const int& k);
+	uint32 getPredecessor(const uint32& vertex, const TMap<uint32, TUniquePtr<std::atomic<uint32>>>& Pred);
 };

@@ -4,6 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "DistanceCalculate.h"
+#include "Components/StaticMeshComponent.h"
+#include "StaticMeshResources.h"
+#include "Engine/StaticMesh.h"
 #include "TestActor.generated.h"
 
 UCLASS()
@@ -23,4 +27,11 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
+private:
+	void TestDistanceCalculation();
+	void AddVerticesAndLinksFromMesh(WeightedGraph& Graph);
+
+	UPROPERTY(VisibleAnywhere)
+	UStaticMeshComponent* MeshComponent;
+	TMap<FVector3f, uint32> UniqueVertex;
 };

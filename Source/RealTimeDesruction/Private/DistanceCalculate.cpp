@@ -2,32 +2,37 @@
 
 std::shared_mutex PredMutex;
 
-TMap<int32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, const TArray<int32>& Sources, const int& k)
-{
-    int32 NumSources = Sources.Num();
-    TArray<int32> Vertices = graph.Vertices();
-    int32 NumVertices = Vertices.Num();
+constexpr uint32 MaxUInt32 = std::numeric_limits<uint32>::max();
+constexpr double MaxDouble = std::numeric_limits<double>::infinity();
 
-    TMap<int32, TUniquePtr<std::atomic<double>>> GlobalDist;
-    TMap<int32, TUniquePtr<std::atomic<int32>>> VisitedBy;
+TMap<uint32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, const TArray<uint32>& Sources, const int& k)
+{
+    uint32 NumSources = Sources.Num();
+    TArray<uint32> Vertices = graph.Vertices();
+    uint32 NumVertices = Vertices.Num();
+
+    TMap<uint32, TUniquePtr<std::atomic<double>>> GlobalDist;
+    TMap<uint32, TUniquePtr<std::atomic<uint32>>> VisitedBy;
     
     TArray<DistOutEntry> DistOut;
-    DistOut.Init({ std::numeric_limits<double>::infinity(), -1 }, NumVertices);
+    DistOut.Init({ MaxDouble, MaxUInt32 }, Vertices.Max());
 
-    for (int32 i = 0; i < NumVertices; ++i)
+    for (uint32 i = 0; i <= (uint32)Vertices.Max(); ++i)
     {
-        GlobalDist.Add(i, MakeUnique<std::atomic<double>>(std::numeric_limits<double>::infinity()));
-        VisitedBy.Add(i, MakeUnique<std::atomic<int32>>(-1));
+        GlobalDist.Add(i, MakeUnique<std::atomic<double>>(MaxDouble));
+        VisitedBy.Add(i, MakeUnique<std::atomic<uint32>>(i));
     }
 
-    ParallelFor(NumSources, [&](int32 i)
+    ParallelFor(NumSources, [&](uint32 i)
     {
-        using PII = TPair<double, int32>;
+        using PII = TPair<double, uint32>;
         std::priority_queue<PII, std::vector<PII>, std::greater<PII>> Q;
 
-        int32 Src = Vertices.Find(Sources[i]);
+        uint32 Src = Sources[i];
         GlobalDist[Src]->store(0.0);
-        DistOut[Src] = { 0.0, Sources[i] };
+        DistOut[Src] = { 0.0, Src };
+        VisitedBy[Src]->store(Src);
+
         Q.emplace(0.0, Src);
 
         while (!Q.empty())
@@ -37,13 +42,13 @@ TMap<int32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, con
 
             auto [curDist, u] = Current;
 
-            if (VisitedBy[u]->load() != -1 && GlobalDist[u]->load() <= curDist) continue;
+            if (VisitedBy[u]->load() != u && GlobalDist[u]->load() <= curDist) continue;
 
             for (const Link& link : graph.getLinks(u))
             {
-                int32 v = link.VertexIndex;
+                uint32 v = link.VertexIndex;
 
-                double NewDist = recalculateDistance(graph, u, v, Vertices, GlobalDist[u]->load(), VisitedBy, k);
+                double NewDist = recalculateDistance(graph, u, v, GlobalDist[u]->load(), VisitedBy, k);
 
                 if (NewDist < GlobalDist[v]->load())
                 {
@@ -59,20 +64,21 @@ TMap<int32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, con
         }
     });
 
-    TMap<int32, DistOutEntry> Result;
-    for (int32 i = 0; i < NumVertices; ++i)
-        Result.Add(Vertices[i], DistOut[i]);
+    TMap<uint32, DistOutEntry> Result;
+    for (uint32 i = 0; i < (uint32)Vertices.Max(); ++i)
+        if (DistOut[i].Weight != MaxDouble)
+            Result.Add(Vertices[i], DistOut[i]);
 
     return Result;
 }
 
-double DistanceCalculate::recalculateDistance(WeightedGraph& graph, const int32& u, const int32& v, const TArray<int32>& Vertices, const double& Dist, const TMap<int32, TUniquePtr<std::atomic<int32>>>& Pred, const int& k)
+double DistanceCalculate::recalculateDistance(WeightedGraph& graph, const uint32& u, const uint32& v, const double& Dist, const TMap<uint32, TUniquePtr<std::atomic<uint32>>>& Pred, const int& k)
 {
     double correctedDist = 0.0;
     TArray<FVector> totalVector;
-    int32 current = v;
+    uint32 current = v;
 
-    const Link* edge = graph.getLink(Vertices[u], Vertices[v]);
+    const Link* edge = graph.getLink(u, v);
     correctedDist += edge->linkVector.Size() + edge->weight;
 
     {
@@ -80,11 +86,11 @@ double DistanceCalculate::recalculateDistance(WeightedGraph& graph, const int32&
 
         for (int32 i = 0; i < k; ++i)
         {
-            int32 pred_i = (current == v ? u : getPredecessor(current, Pred));
+            uint32 pred_i = (current == v ? u : getPredecessor(current, Pred));
 
-            if (pred_i == -1 || !Pred.Contains(pred_i) || Pred[pred_i]->load() == -1) break;
+            if (pred_i == current || pred_i == MaxUInt32) break;
 
-            edge = graph.getLink(Vertices[pred_i], Vertices[current]);
+            edge = graph.getLink(pred_i, current);
             if (!edge) break;
 
             FVector edgeVector = edge->linkVector;
@@ -109,8 +115,8 @@ double DistanceCalculate::recalculateDistance(WeightedGraph& graph, const int32&
     return Dist + correctedDist;
 }
 
-int32 DistanceCalculate::getPredecessor(const int32& vertex, const TMap<int32, TUniquePtr<std::atomic<int32>>>& Pred)
+uint32 DistanceCalculate::getPredecessor(const uint32& vertex, const TMap<uint32, TUniquePtr<std::atomic<uint32>>>& Pred)
 {
     auto it = Pred.Find(vertex);
-    return (it != nullptr ? (*it)->load() : -1);
+    return (it != nullptr ? (*it)->load() : MaxUInt32);
 }

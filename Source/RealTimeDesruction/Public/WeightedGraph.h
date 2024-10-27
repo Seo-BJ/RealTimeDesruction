@@ -6,7 +6,7 @@
 
 struct Link
 {
-	int32 VertexIndex;
+	uint32 VertexIndex;
 	double weight;
 	FVector linkVector;
 
@@ -24,27 +24,27 @@ public:
 	WeightedGraph(bool hasDirection) : hasDirection(hasDirection) {};
 	~WeightedGraph();
 
-	bool addVertex(const int32& index);
+	bool addVertex(const uint32& index);
 
-	bool addLink(const int32& FromIndex, const int32& ToIndex, const FVector& linkVector, const double& LinkWeight = 0.0);
+	bool addLink(const uint32& FromIndex, const uint32& ToIndex, const FVector& linkVector, const double& LinkWeight = 0.0);
 
-	bool deleteLink(const int32& FromIndex, const int32& ToIndex);
+	bool deleteLink(const uint32& FromIndex, const uint32& ToIndex);
 
-	bool deleteVertex(const int32& index);
+	bool deleteVertex(const uint32& index);
 
-	Link* getLink(const int32& FromIndex, const int32& ToIndex);
+	Link* getLink(const uint32& FromIndex, const uint32& ToIndex);
 
-	TArray<Link> getLinks(const int32& index);
+	TArray<Link> getLinks(const uint32& index);
 
-	bool updateLink(const int32& FromIndex, const int32& ToIndex, const double& LinkWeight);
+	bool updateLink(const uint32& FromIndex, const uint32& ToIndex, const double& LinkWeight);
 
-	const int32 size();
+	const uint32 size();
 
-	const TArray<int32> Vertices() const;
+	const TArray<uint32> Vertices() const;
 
 	const bool isDirected() const;
 
 private:
-	TMap<int32, TArray<Link>> graph;
+	TMap<uint32, TArray<Link>> graph;
 	bool hasDirection;
 };

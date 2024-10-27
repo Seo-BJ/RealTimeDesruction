@@ -7,18 +7,18 @@ WeightedGraph::~WeightedGraph()
 	graph.Empty();
 }
 
-bool WeightedGraph::addVertex(const int32& index)
+bool WeightedGraph::addVertex(const uint32& index)
 {
-	if (graph.Find(index) == nullptr)
+	if (!graph.Contains(index))
 	{
-		graph[index];
+		graph.Emplace(index, TArray<Link>());
 		return true;
 	}
 
 	return false;
 }
 
-bool WeightedGraph::deleteVertex(const int32& index)
+bool WeightedGraph::deleteVertex(const uint32& index)
 {
 	if (graph.Remove(index) > 0)
 	{
@@ -32,7 +32,7 @@ bool WeightedGraph::deleteVertex(const int32& index)
 	return false;
 }
 
-bool WeightedGraph::addLink(const int32& FromIndex, const int32& ToIndex, const FVector& linkVector, const double& LinkWeight)
+bool WeightedGraph::addLink(const uint32& FromIndex, const uint32& ToIndex, const FVector& linkVector, const double& LinkWeight)
 {
 	addVertex(FromIndex);
 	addVertex(ToIndex);
@@ -40,9 +40,9 @@ bool WeightedGraph::addLink(const int32& FromIndex, const int32& ToIndex, const 
 
 	if (getLink(FromIndex, ToIndex) == nullptr)
 	{
-		graph[FromIndex].Add(Link(ToIndex, LinkWeight, linkVector));
+		graph[FromIndex].Emplace(Link(ToIndex, LinkWeight, linkVector));
 		if (!hasDirection && getLink(ToIndex, FromIndex) == nullptr)
-			graph[ToIndex].Add(Link(FromIndex, LinkWeight, -linkVector));
+			graph[ToIndex].Emplace(Link(FromIndex, LinkWeight, -linkVector));
 
 		return true;
 	}
@@ -50,7 +50,7 @@ bool WeightedGraph::addLink(const int32& FromIndex, const int32& ToIndex, const 
 	return false;
 }
 
-bool WeightedGraph::deleteLink(const int32& FromIndex, const int32& ToIndex)
+bool WeightedGraph::deleteLink(const uint32& FromIndex, const uint32& ToIndex)
 {
 	auto fromlink = getLink(FromIndex, ToIndex);
 	auto tolink = getLink(ToIndex, FromIndex);
@@ -67,7 +67,7 @@ bool WeightedGraph::deleteLink(const int32& FromIndex, const int32& ToIndex)
 	return false;
 }
 
-Link* WeightedGraph::getLink(const int32& FromIndex, const int32& ToIndex)
+Link* WeightedGraph::getLink(const uint32& FromIndex, const uint32& ToIndex)
 {
 	if (!graph.Contains(FromIndex)) return nullptr;
 
@@ -77,14 +77,14 @@ Link* WeightedGraph::getLink(const int32& FromIndex, const int32& ToIndex)
 	return nullptr;
 }
 
-TArray<Link> WeightedGraph::getLinks(const int32& index)
+TArray<Link> WeightedGraph::getLinks(const uint32& index)
 {
 	if (!graph.Contains(index)) return TArray<Link>();
 
 	return graph[index];
 }
 
-bool WeightedGraph::updateLink(const int32& FromIndex, const int32& ToIndex, const double& LinkWeight)
+bool WeightedGraph::updateLink(const uint32& FromIndex, const uint32& ToIndex, const double& LinkWeight)
 {
 	auto fromlink = getLink(FromIndex, ToIndex);
 	auto tolink = getLink(ToIndex, FromIndex);
@@ -101,14 +101,14 @@ bool WeightedGraph::updateLink(const int32& FromIndex, const int32& ToIndex, con
 	return false;
 }
 
-const int32 WeightedGraph::size()
+const uint32 WeightedGraph::size()
 {
 	return graph.Num();
 }
 
-const TArray<int32> WeightedGraph::Vertices() const
+const TArray<uint32> WeightedGraph::Vertices() const
 {
-	TArray<int32> vertices;
+	TArray<uint32> vertices;
 	graph.GetKeys(vertices);
 	return vertices;
 }
