@@ -53,12 +53,10 @@ void ATestActor::TestDistanceCalculation()
     DistanceCalculate DistanceCalculator;
 
     TMap<uint32, DistOutEntry> Result = DistanceCalculator.Calculate(MyGraph, Sources, k);
-    TArray<uint32> Vertex;
-    UniqueVertex.GenerateValueArray(Vertex);
 
-    for (const auto& v : Vertex)
+    for (const auto& r : Result)
     {
-        UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Distance: %f, Source: %d"), v, Result[v].Weight, Result[v].Source);
+        UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Distance: %f, Source: %d"), r.Key, r.Value.Weight, r.Value.Source);
     }
 }
 
@@ -83,6 +81,10 @@ void ATestActor::AddVerticesAndLinksFromMesh(WeightedGraph& Graph)
         FVector3f Vertex0 = PositionVertexBuffer.VertexPosition(Index0);
         FVector3f Vertex1 = PositionVertexBuffer.VertexPosition(Index1);
         FVector3f Vertex2 = PositionVertexBuffer.VertexPosition(Index2);
+
+        UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Position: %s"), Index0, *Vertex0.ToString());
+        UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Position: %s"), Index1, *Vertex1.ToString());
+        UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Position: %s"), Index2, *Vertex2.ToString());
 
         Graph.addLink(Index0, Index1, FVector(Vertex1 - Vertex0), 1.0f);
         Graph.addLink(Index1, Index2, FVector(Vertex2 - Vertex1), 1.0f);
