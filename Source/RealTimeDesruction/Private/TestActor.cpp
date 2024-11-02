@@ -18,7 +18,7 @@ void ATestActor::BeginPlay()
 {
 	Super::BeginPlay();
 	
-    TestDistanceCalculation();
+    DistanceCalculation();
 }
 
 // Called every frame
@@ -28,19 +28,12 @@ void ATestActor::Tick(float DeltaTime)
 
 }
 
-void ATestActor::TestDistanceCalculation()
+void ATestActor::DistanceCalculation()
 {
     // Create a weighted graph
     WeightedGraph MyGraph(false);
 
-    UStaticMesh* MyMesh = MeshComponent->GetStaticMesh();
-
-    if (MyMesh)
-    {
-        // Add vertices and links from the mesh
-        AddVerticesAndLinksFromMesh(MyGraph);
-    }
-    else
+    if (!AddVerticesAndLinksFromMesh(MyGraph))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to get mesh from component."));
         return;
@@ -52,21 +45,21 @@ void ATestActor::TestDistanceCalculation()
 
     DistanceCalculate DistanceCalculator;
 
-    TMap<uint32, DistOutEntry> Result = DistanceCalculator.Calculate(MyGraph, Sources, k);
+    Distance = DistanceCalculator.Calculate(MyGraph, Sources, k);
 
-    for (const auto& r : Result)
-    {
-        UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Distance: %f, Source: %d"), r.Key, r.Value.Weight, r.Value.Source);
-    }
+    //for (const auto& r : Distance)
+    //{
+    //    UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Distance: %f, Source: %d"), r.Key, r.Value.Weight, r.Value.Source);
+    //}
 }
 
-void ATestActor::AddVerticesAndLinksFromMesh(WeightedGraph& Graph)
+bool ATestActor::AddVerticesAndLinksFromMesh(WeightedGraph& Graph)
 {
-    if (!MeshComponent) return;
+    if (!MeshComponent) return false;
 
     // Get the mesh's static mesh
     UStaticMesh* Mesh = MeshComponent->GetStaticMesh();
-    if (!Mesh) return;
+    if (!Mesh) return false;
 
     const FStaticMeshLODResources& LODResources = Mesh->GetRenderData()->LODResources[0];
     const FPositionVertexBuffer& PositionVertexBuffer = LODResources.VertexBuffers.PositionVertexBuffer;
@@ -82,12 +75,14 @@ void ATestActor::AddVerticesAndLinksFromMesh(WeightedGraph& Graph)
         FVector3f Vertex1 = PositionVertexBuffer.VertexPosition(Index1);
         FVector3f Vertex2 = PositionVertexBuffer.VertexPosition(Index2);
 
-        UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Position: %s"), Index0, *Vertex0.ToString());
-        UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Position: %s"), Index1, *Vertex1.ToString());
-        UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Position: %s"), Index2, *Vertex2.ToString());
+        //UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Position: %s"), Index0, *Vertex0.ToString());
+        //UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Position: %s"), Index1, *Vertex1.ToString());
+        //UE_LOG(LogTemp, Log, TEXT("Vertex: %d, Position: %s"), Index2, *Vertex2.ToString());
 
-        Graph.addLink(Index0, Index1, FVector(Vertex1 - Vertex0), 1.0f);
-        Graph.addLink(Index1, Index2, FVector(Vertex2 - Vertex1), 1.0f);
-        Graph.addLink(Index2, Index0, FVector(Vertex0 - Vertex2), 1.0f);
+        Graph.addLink(Index0, Index1, FVector(Vertex1 - Vertex0), 1.0);
+        Graph.addLink(Index1, Index2, FVector(Vertex2 - Vertex1), 1.0);
+        Graph.addLink(Index2, Index0, FVector(Vertex0 - Vertex2), 1.0);
     }
+
+    return true;
 }
