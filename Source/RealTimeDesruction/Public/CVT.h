@@ -6,6 +6,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Rendering/PositionVertexBuffer.h"
 #include "Engine/StaticMesh.h"
+#include "Misc/ScopeLock.h"
 
 /**
  * º¯¼ö

@@ -1,15 +1,17 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "TestActor_CVT.h"
 
+// For Voronoi Cells
 static TMap<int32, FColor> ColorMap = {
     {0, FColor::Red},
     {1, FColor::Green},
     {2, FColor::Blue},
     {3, FColor::Yellow},
     {4, FColor::Cyan},
-    {5, FColor::Magenta}
+    {5, FColor::Magenta},
+    {6, FColor::Turquoise},
+    {7, FColor::Silver}
 };
 
 // Sets default values
@@ -19,6 +21,7 @@ ATestActor_CVT::ATestActor_CVT()
 	PrimaryActorTick.bCanEverTick = true;
 
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
+    NumOfVoronoiSites = 0;
 }
 
 // Called when the game starts or when spawned
@@ -29,7 +32,7 @@ void ATestActor_CVT::BeginPlay()
     // Test Code
 	
     CVT_inst.GetVertexDataFromStaticMeshComponent(MeshComponent);
-    CVT_inst.SetVoronoiSites(getRandomVoronoiSites(CVT_inst.Vertices, 5));
+    CVT_inst.SetVoronoiSites(getRandomVoronoiSites(CVT_inst.Vertices, NumOfVoronoiSites));
     
     GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &ATestActor_CVT::ExecuteCVT, DelayTime, false);
     VisualizeVertices();
@@ -53,7 +56,7 @@ void ATestActor_CVT::VisualizeVertices()
         if (CVT_inst.Vertices[i].Equals(CVT_inst.Sites[RegionOfVertex]))
             DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, FColor::White, true, -1.0f, 0);
         else
-            DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, ColorMap[RegionOfVertex%6], true, -1.0f, 0);            
+            DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, ColorMap[RegionOfVertex % ColorMap.Num()], true, -1.0f, 0);
 	}
 }
 
@@ -75,11 +78,6 @@ TArray<FVector3f> ATestActor_CVT::getRandomVoronoiSites(const TArray<FVector3f>&
             SelectedIndices.Add(RandomIndex);
             VoronoiSites.Add(Vertices[RandomIndex]);
         }
-    }
-
-    for (int32 i = 0; i < VoronoiSites.Num(); i++)
-    {
-        UE_LOG(LogTemp, Log, TEXT("Vertex %d: X=%f, Y=%f, Z=%f"), i, VoronoiSites[i].X, VoronoiSites[i].Y, VoronoiSites[i].Z);
     }
 
     return VoronoiSites;

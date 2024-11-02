@@ -36,6 +36,8 @@ private:
 	UPROPERTY(VisibleAnywhere)
 	UStaticMeshComponent* MeshComponent;
 
+	UPROPERTY(EditAnywhere)
+	int32 NumOfVoronoiSites;
 
 	void ExecuteCVT();
 

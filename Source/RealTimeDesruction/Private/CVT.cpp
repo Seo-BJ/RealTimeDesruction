@@ -50,34 +50,28 @@ void CVT::GetVertexDataFromStaticMeshComponent(const UStaticMeshComponent* Stati
 // 보로노이 셀 재설정
 void CVT::RefreshRegion()
 {
-    // 보로노이 셀 TATTAY 초기화
     CVT::Region.Empty();
     CVT::Region.AddUninitialized(CVT::Vertices.Num());
 
-    // 버텍스 TARRAY 순회하며 각 버텍스가 시드 포인트 TARRY의 몇번째 셀과 제일 가까운지 확인 후 저장
-    for (int32 i = 0; i < CVT::Vertices.Num(); ++i)
-    {
-        // 변수 setup
-        const FVector3f& Vertex = CVT::Vertices[i];
-        int32 ClosestSiteIndex = -1;
-        float ClosestDistance = FLT_MAX;
-
-        // 시드 포인트 TARRY 순회하며 몇번째 셀이 제일 가까운지 확인 (유클리드 거리)
-        for (int32 j = 0; j < CVT::Sites.Num(); ++j)
+    ParallelFor(CVT::Vertices.Num(), [&](int32 i)
         {
-            const FVector3f& Site = CVT::Sites[j];
-            float Distance = FVector3f::DistSquared(Vertex, Site);
+            const FVector3f& Vertex = CVT::Vertices[i];
+            int32 ClosestSiteIndex = -1;
+            float ClosestDistance = FLT_MAX;
 
-            if (Distance < ClosestDistance)
+            for (int32 j = 0; j < CVT::Sites.Num(); ++j)
             {
-                ClosestDistance = Distance;
-                ClosestSiteIndex = j;
-            }
-        }
+                const FVector3f& Site = CVT::Sites[j];
+                float Distance = FVector3f::DistSquared(Vertex, Site);
 
-        // 버텍스 TARRAY의 i번째 버텍스가 시드 포인트 TARRY의 몇번째 셀과 제일 가까운지 저장
-        CVT::Region[i] = ClosestSiteIndex;
-    }
+                if (Distance < ClosestDistance)
+                {
+                    ClosestDistance = Distance;
+                    ClosestSiteIndex = j;
+                }
+            }
+            CVT::Region[i] = ClosestSiteIndex;
+        });
 }
 
 // 보로노이 셀의 무게중심을 계산
@@ -87,66 +81,67 @@ void CVT::CalculateCentroids()
     CVT::BaryCenters.Empty();
     CVT::BaryCenters.AddUninitialized(CVT::Sites.Num());
 
-    TMap<int32, FVector3f> RegionSum;
-    TMap<int32, int32> RegionCount;
+    TArray<FVector3f> RegionSum;
+    TArray<int32> RegionCount;
+    RegionSum.Init(FVector3f(0, 0, 0), CVT::Sites.Num());
+    RegionCount.Init(0, CVT::Sites.Num());
 
-    // 버텍스 TARRAY 순회하며 시드포인트끼리 좌표값을 더함, 그리고 몇개를 더했는지도 기록
-    for (int32 i = 0; i < CVT::Vertices.Num(); ++i)
-    {
-        int32 RegionIndex = CVT::Region[i];
+    FCriticalSection Mutex;
 
-        // 해당 셀에 대한 계산이 처음인지 아닌지에 따라 다르게 처리
-        if (RegionSum.Contains(RegionIndex))
+    // 각 버텍스 병렬 처리
+    ParallelFor(CVT::Vertices.Num(), [&](int32 i)
         {
-            RegionSum[RegionIndex] += CVT::Vertices[i];
-            RegionCount[RegionIndex]++;
+            int32 RegionIndex = CVT::Region[i];
+            FVector3f Vertex = CVT::Vertices[i];
+
+            // 뮤텍스를 잠궈서 동기화
+            {
+                FScopeLock Lock(&Mutex);
+                RegionSum[RegionIndex] += Vertex;
+                RegionCount[RegionIndex]++;
+            }
+        });
+
+    // 무게중심 좌표를 계산
+    for (int32 i = 0; i < CVT::Sites.Num(); i++)
+    {
+        if (RegionCount[i] > 0)
+        {
+            CVT::BaryCenters[i] = RegionSum[i] / RegionCount[i];
+            UE_LOG(LogTemp, Log, TEXT("index : %d  centroid : x=%f, y=%f, z=%f"), i, CVT::BaryCenters[i].X, CVT::BaryCenters[i].Y, CVT::BaryCenters[i].Z);
         }
         else
         {
-            RegionSum.Add(RegionIndex, CVT::Vertices[i]);
-            RegionCount.Add(RegionIndex, 1);
+            CVT::BaryCenters[i] = FVector3f(0, 0, 0);  // 빈 셀의 경우 (필요시 다른 처리)
         }
     }
-
-    // 더해진 좌표값을 평균을 내서 무게중심 좌표를 계산
-    for (int32 i = 0; i < CVT::Sites.Num(); i++)
-    {
-        FVector3f Centroid = RegionSum[i] / RegionCount[i];
-        UE_LOG(LogTemp, Log, TEXT("index : %d  centroid : x=%f, y=%f, z=%f"), i, Centroid.X, Centroid.Y, Centroid.Z);
-        CVT::BaryCenters[i] = Centroid;
-    }
 }
-
 // 무게중심을 기준으로 새로운 시드 포인트 생성
 TArray<FVector3f> CVT::GenerateNewSite()
 {
-    // 새 TARRAY 생성 및 초기화
     TArray<FVector3f> NewSites;
     NewSites.AddUninitialized(CVT::Sites.Num());
 
-    // 무게중심 TARRAY를 순회하며 시드포인트를 생성
-    for (int32 i = 0; i < CVT::BaryCenters.Num(); ++i)
-    {
-        int32 ClosestSiteIndex = -1;
-        float ClosestDistance = FLT_MAX;
-
-        // 무게중심에서 제일 가까운 버텍스를 시드포인트로 지정 (유클리드 거리)
-        for (int32 j = 0; j < CVT::Vertices.Num(); ++j)
+    ParallelFor(CVT::BaryCenters.Num(), [&](int32 i)
         {
-            // 셀에 속하지 않는 버텍스는 무시
-            if (CVT::Region[j] != i)
-                continue;
+            int32 ClosestSiteIndex = -1;
+            float ClosestDistance = FLT_MAX;
 
-            float Distance = FVector3f::DistSquared(CVT::BaryCenters[i], CVT::Vertices[j]);
-
-            if (Distance < ClosestDistance)
+            for (int32 j = 0; j < CVT::Vertices.Num(); ++j)
             {
-                ClosestDistance = Distance;
-                ClosestSiteIndex = j;
+                if (CVT::Region[j] != i)
+                    continue;
+
+                float Distance = FVector3f::DistSquared(CVT::BaryCenters[i], CVT::Vertices[j]);
+
+                if (Distance < ClosestDistance)
+                {
+                    ClosestDistance = Distance;
+                    ClosestSiteIndex = j;
+                }
             }
-        }
-        NewSites[i] = CVT::Vertices[ClosestSiteIndex];
-    }
+            NewSites[i] = CVT::Vertices[ClosestSiteIndex];
+        });
 
     return NewSites;
 }
