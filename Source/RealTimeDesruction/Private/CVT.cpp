@@ -24,7 +24,7 @@ void CVT::Lloyd_Algo()
         OldSites = CVT::Sites;
         CVT::Sites = CVT::GenerateNewSite();
         CVT::RefreshRegion();
-        UE_LOG(LogTemp, Log, TEXT("DONE"))
+        UE_LOG(LogTemp, Log, TEXT("Lloyd Algorithm is successfully executed."))
     } while (isEqualSites(CVT::Sites, OldSites));
 }
 
@@ -43,7 +43,7 @@ void CVT::GetVertexDataFromStaticMeshComponent(const UStaticMeshComponent* Stati
             UniqueVertices.Add(vertex);
         }
         CVT::Vertices = UniqueVertices.Array();
-        UE_LOG(LogTemp, Display, TEXT("Vertices loading complete"))
+        UE_LOG(LogTemp, Display, TEXT("Vertices loading completed"))
     }
 }
 
@@ -108,7 +108,6 @@ void CVT::CalculateCentroids()
         if (RegionCount[i] > 0)
         {
             CVT::BaryCenters[i] = RegionSum[i] / RegionCount[i];
-            UE_LOG(LogTemp, Log, TEXT("index : %d  centroid : x=%f, y=%f, z=%f"), i, CVT::BaryCenters[i].X, CVT::BaryCenters[i].Y, CVT::BaryCenters[i].Z);
         }
         else
         {
