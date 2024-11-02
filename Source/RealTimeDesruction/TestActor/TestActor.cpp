@@ -18,7 +18,16 @@ void ATestActor::BeginPlay()
 {
 	Super::BeginPlay();
 	
-    DistanceCalculation();
+    if (!AddVerticesAndLinksFromMesh())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to get mesh from component."));
+    }
+    else
+    {
+        TArray<uint32> Sources = Sources = { 0, 10, 20 };
+        int k = 3;
+        DistanceCalculation(Sources, k);
+    }
 }
 
 // Called every frame
@@ -28,24 +37,11 @@ void ATestActor::Tick(float DeltaTime)
 
 }
 
-void ATestActor::DistanceCalculation()
+void ATestActor::DistanceCalculation(const TArray<uint32>& Sources, const int& k)
 {
-    // Create a weighted graph
-    WeightedGraph MyGraph(false);
-
-    if (!AddVerticesAndLinksFromMesh(MyGraph))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to get mesh from component."));
-        return;
-    }
-
-    // Sources to start calculation
-    TArray<uint32> Sources = { 0, 10, 20 };
-    int k = 3;
-
     DistanceCalculate DistanceCalculator;
 
-    Distance = DistanceCalculator.Calculate(MyGraph, Sources, k);
+    Distance = DistanceCalculator.Calculate(Graph, Sources, k);
 
     //for (const auto& r : Distance)
     //{
@@ -53,10 +49,10 @@ void ATestActor::DistanceCalculation()
     //}
 }
 
-bool ATestActor::AddVerticesAndLinksFromMesh(WeightedGraph& Graph)
+bool ATestActor::AddVerticesAndLinksFromMesh()
 {
     if (!MeshComponent) return false;
-
+    
     // Get the mesh's static mesh
     UStaticMesh* Mesh = MeshComponent->GetStaticMesh();
     if (!Mesh) return false;
