@@ -26,17 +26,18 @@ class CVT
 {
 public:
 	CVT();
-	TArray<FVector> Vertices;
-	TArray<FVector> Sites;
-	TArray<FVector> BaryCenters;
+	TArray<FVector3f> Vertices;
+	TArray<FVector3f> Sites;
+	TArray<FVector3f> BaryCenters;
 	TArray<int32> Region;
-	void Lloyd_Algo(TArray<FVector>& InputSites);
+	void Lloyd_Algo();
+	void GetVertexDataFromStaticMeshComponent(const UStaticMeshComponent* StaticMeshComponent);
+	void SetVoronoiSites(TArray<FVector3f> VoronoiSites);
 	~CVT();
 
 private:
-	void GetVertexDataFromStaticMeshComponent(const UStaticMeshComponent* StaticMeshComponent);
 	void RefreshRegion();
 	void CalculateCentroids();
-	TArray<FVector> GenerateNewSite();
-	bool isEqualSites(TArray<FVector>& Sites1, TArray<FVector>& Sites2);
+	TArray<FVector3f> GenerateNewSite();
+	bool isEqualSites(TArray<FVector3f>& Sites1, TArray<FVector3f>& Sites2);
 };
