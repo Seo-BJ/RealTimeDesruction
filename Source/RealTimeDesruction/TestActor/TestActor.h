@@ -28,10 +28,11 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 private:
-	void DistanceCalculation();
-	bool AddVerticesAndLinksFromMesh(WeightedGraph& Graph);
+	void DistanceCalculation(const TArray<uint32>& Sources, const int& k);
+	bool AddVerticesAndLinksFromMesh();
 
 	UPROPERTY(VisibleAnywhere)
 	UStaticMeshComponent* MeshComponent;
+	WeightedGraph Graph = WeightedGraph(false);
 	TMap<uint32, DistOutEntry> Distance;
 };
