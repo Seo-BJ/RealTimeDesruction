@@ -7,7 +7,7 @@
 #include <atomic>
 #include <shared_mutex>
 #include "CoreMinimal.h"
-#include "WeightedGraph.h"
+#include "../WeightedGraph/WeightedGraph.h"
 #include "Async/ParallelFor.h"
 
 struct DistOutEntry

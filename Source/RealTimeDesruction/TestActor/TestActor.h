@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "DistanceCalculate.h"
+#include "../DistanceCalculate/DistanceCalculate.h"
 #include "Components/StaticMeshComponent.h"
 #include "StaticMeshResources.h"
 #include "Engine/StaticMesh.h"
