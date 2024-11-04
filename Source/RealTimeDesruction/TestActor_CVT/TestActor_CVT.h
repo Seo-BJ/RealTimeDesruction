@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "CVT.h"
+#include "../CVT/CVT.h"
 #include "Components/StaticMeshComponent.h"
 #include "StaticMeshResources.h"
 #include "Engine/StaticMesh.h"
@@ -37,7 +37,7 @@ private:
 	UStaticMeshComponent* MeshComponent;
 
 	UPROPERTY(EditAnywhere)
-	int32 NumOfVoronoiSites;
+	uint32 NumOfVoronoiSites;
 
 	void ExecuteCVT();
 
