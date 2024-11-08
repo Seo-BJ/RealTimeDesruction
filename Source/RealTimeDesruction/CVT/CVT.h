@@ -23,7 +23,7 @@
  * GenerateNewSite : 무게중심을 기준으로 새로운 시드 포인트 생성 
  * isEqualSites : 두 시드포인트 TARRAY가 동일한지 확인
  */
-class CVT
+class REALTIMEDESRUCTION_API CVT
 {
 public:
 	CVT();
