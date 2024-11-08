@@ -9,6 +9,7 @@ SplitMesh::SplitMesh(const UStaticMesh* Mesh, const TMap<uint32, DistOutEntry>* 
 	NumVertices = LODResources.GetNumVertices();
 }
 
+// 그래프 거리 기반 사면체 분리 위치 계산
 FVector3f SplitMesh::CalculateSplitPoint(const int32& p1, const int32& p2)
 {
 	FVector3f Point1 = PositionVertexBuffer->VertexPosition(p1);
@@ -18,6 +19,7 @@ FVector3f SplitMesh::CalculateSplitPoint(const int32& p1, const int32& p2)
 	return Point1 + ((Point2 - Point1) * (1 - Weight));
 }
 
+// 버텍스가 어느 Seed에 속하는지에 따른 사면체 분리
 TMap<uint32, FIntVector4> SplitMesh::SplitTetra(const FIntVector4& tetra)
 {
 	TMap<uint32, FIntVector4> Result;
@@ -196,7 +198,7 @@ TMap<uint32, FIntVector4> SplitMesh::SplitTetra(const FIntVector4& tetra)
 	return Result;
 }
 
-
+// 사면체에서 메쉬를 분리하고 새 메쉬 반환
 TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Tets)
 {
 	TArray<UProceduralMeshComponent*> Meshes;
@@ -206,18 +208,21 @@ TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Te
 	TMap<uint32, TArray<FVector>> Vertices;
 	TMap<uint32, TArray<int32>> Triangles;
 
+	// 새로운 메쉬 선언
 	for (int i = 0; i < Seed.Num(); ++i)
 	{
 		Meshes.Emplace(NewObject<UProceduralMeshComponent>());
 		Idx.Emplace(Seed.Array()[i], i);
 	}
-
+	
+	// 기존 버텍스 추가
 	for (uint32 i = 0; i < PositionVertexBuffer->GetNumVertices(); ++i)
 	{
 		FVector Position = FVector(PositionVertexBuffer->VertexPosition(i));
 		Vertices[Distance->FindRef(i).Source].Emplace(Position);
 	}
 
+	// 사면체 분리 후 시드별 저장
 	ParallelFor(Tets.Num(), [&](uint32 i)
 		{
 			auto result = SplitTetra(Tets[i]);
@@ -240,6 +245,8 @@ TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Te
 			TArray<int32> PosIndices;
 			TArray<FVector3d> Pos;
 
+			// 외적을 이용한 삼각형 인덱스 결정
+			// 삼각형의 외적이 사면체의 중심을 향한다면 안쪽을 보고 있는 것이므로 반대 방향으로 회전
 			for (int i = 0; i < 4; ++i)
 			{
 				FVector VertexPos;
@@ -272,7 +279,6 @@ TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Te
 			for (int i = 0; i < 4; ++i)
 			{
 				auto normal = FVector::CrossProduct(Pos[(i + 1) % 4] - Pos[i], Pos[(i + 2) % 4] - Pos[i]);
-				normal.Normalize();
 
 				auto isFacing = FVector::DotProduct(normal, Center - Pos[i]);
 
@@ -291,7 +297,8 @@ TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Te
 			}
 		}
 	}
-
+	
+	// 새 메쉬 추가
 	for (auto& MeshKey : Idx)
 	{
 		uint32 Index = MeshKey.Value;
