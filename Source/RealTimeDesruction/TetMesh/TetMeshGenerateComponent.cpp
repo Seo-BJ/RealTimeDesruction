@@ -11,7 +11,6 @@ UTetMeshGenerateComponent::UTetMeshGenerateComponent()
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = false;
-
 	// ...
 }
 
@@ -92,6 +91,7 @@ void UTetMeshGenerateComponent::BeginPlay()
 			UE_LOG(LogTemp, Display, TEXT("Tet %d: V0=%d, V1=%d, V2=%d, V3=%d"), i, Tet.X, Tet.Y, Tet.Z, Tet.W);
 		}
 		*/
+		GenerateGraphFromTets();
 	}
 	else
 	{
@@ -99,3 +99,20 @@ void UTetMeshGenerateComponent::BeginPlay()
 	}
 }
 
+void UTetMeshGenerateComponent::GenerateGraphFromTets()
+{
+	for (const FIntVector4 Tet : UTetMeshGenerateComponent::Tets)
+	{
+		FVector Vertex_X = UTetMeshGenerateComponent::TetMeshVertices[Tet.X];
+		FVector Vertex_Y = UTetMeshGenerateComponent::TetMeshVertices[Tet.Y];
+		FVector Vertex_Z = UTetMeshGenerateComponent::TetMeshVertices[Tet.Z];
+		FVector Vertex_W = UTetMeshGenerateComponent::TetMeshVertices[Tet.W];
+		
+		Graph.addLink(Tet.X, Tet.Y, Vertex_Y - Vertex_X, 1.0f);
+		Graph.addLink(Tet.Y, Tet.Z, Vertex_Z - Vertex_Y, 1.0f);
+		Graph.addLink(Tet.Z, Tet.X, Vertex_X - Vertex_Z, 1.0f);
+		Graph.addLink(Tet.X, Tet.W, Vertex_W - Vertex_X, 1.0f);
+		Graph.addLink(Tet.Y, Tet.W, Vertex_W - Vertex_Y, 1.0f);
+		Graph.addLink(Tet.Z, Tet.W, Vertex_W - Vertex_Z, 1.0f);
+	}
+}

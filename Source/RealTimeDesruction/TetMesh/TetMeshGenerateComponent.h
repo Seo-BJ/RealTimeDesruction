@@ -4,8 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "../WeightedGraph/WeightedGraph.h"
 #include "TetMeshGenerateComponent.generated.h"
-
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class REALTIMEDESRUCTION_API UTetMeshGenerateComponent : public UActorComponent
@@ -59,8 +59,13 @@ public:
 	// UPROPERTY(EditAnywhere, Category = "Tet Mesh Info", meta = ())
 	TArray<FIntVector4> Tets;
 
+	WeightedGraph Graph{ false };
+
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
 
+
+private:
+	void GenerateGraphFromTets();
 };
