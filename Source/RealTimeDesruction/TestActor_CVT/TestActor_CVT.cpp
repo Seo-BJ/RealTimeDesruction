@@ -33,7 +33,7 @@ void ATestActor_CVT::BeginPlay()
 	
     CVT_inst.GetVertexDataFromStaticMeshComponent(MeshComponent);
     CVT_inst.SetVoronoiSites(getRandomVoronoiSites(CVT_inst.Vertices, NumOfVoronoiSites));
-    
+
     GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &ATestActor_CVT::ExecuteCVT, DelayTime, false);
     VisualizeVertices();
 }
@@ -53,32 +53,28 @@ void ATestActor_CVT::VisualizeVertices()
 		FVector WorldPosition = GetActorTransform().TransformPosition(static_cast<FVector>(CVT_inst.Vertices[i]));
         int32 RegionOfVertex = CVT_inst.Region[i];
 
-        if (CVT_inst.Vertices[i].Equals(CVT_inst.Sites[RegionOfVertex]))
+        if (i == CVT_inst.Sites[RegionOfVertex])
             DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, FColor::White, true, -1.0f, 0);
         else
             DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, ColorMap[RegionOfVertex % ColorMap.Num()], true, -1.0f, 0);
 	}
 }
 
-TArray<FVector3f> ATestActor_CVT::getRandomVoronoiSites(const TArray<FVector3f>& Vertices, int32 SiteNum)
+TArray<uint32> ATestActor_CVT::getRandomVoronoiSites(const TArray<FVector>& Vertices, int32 SiteNum)
 {
-    TArray<FVector3f> VoronoiSites;
-    TSet<int32> SelectedIndices;
+    TArray<uint32> VoronoiSites;
+    TSet<uint32> SelectedIndices;
 
     SiteNum = FMath::Min(SiteNum, Vertices.Num());
 
     while (SelectedIndices.Num() < SiteNum)
     {
         // ·£´ý ÀÎµ¦½º »ý¼º
-        int32 RandomIndex = FMath::RandRange(0, Vertices.Num() - 1);
-
-        // Áßº¹µÈ ÀÎµ¦½º°¡ ¾Æ´Ò °æ¿ì ¼±ÅÃ
-        if (!SelectedIndices.Contains(RandomIndex))
-        {
-            SelectedIndices.Add(RandomIndex);
-            VoronoiSites.Add(Vertices[RandomIndex]);
-        }
+        uint32 RandomIndex = FMath::RandRange(0, Vertices.Num() - 1);
+        SelectedIndices.Add(RandomIndex);
     }
+    VoronoiSites = SelectedIndices.Array();
+    VoronoiSites.Sort();
 
     return VoronoiSites;
 }

@@ -11,7 +11,7 @@
 /**
  * 변수
  * Vertices : 버텍스 좌표 저장
- * Sites : 시드포인트 좌표 저장
+ * Sites : 시드포인트 버텍스 인덱스 저장
  * BaryCenters : 무게중심 좌표 저장
  * Region : 보로노이 셀을 의미. 각 버텍스가 몇번째 시드포인트가 제일 가까운지 저장
  * 
@@ -27,18 +27,19 @@ class REALTIMEDESRUCTION_API CVT
 {
 public:
 	CVT();
-	TArray<FVector3f> Vertices;
-	TArray<FVector3f> Sites;
-	TArray<FVector3f> BaryCenters;
-	TArray<int32> Region;
+	TArray<FVector> Vertices;
+	TArray<uint32> Sites;
+	TArray<FVector> BaryCenters;
+	TArray<uint32> Region;
 	void Lloyd_Algo();
 	void GetVertexDataFromStaticMeshComponent(const UStaticMeshComponent* StaticMeshComponent);
-	void SetVoronoiSites(TArray<FVector3f> VoronoiSites);
+	void SetVertices(TArray<FVector> new_Vertices);
+	void SetVoronoiSites(TArray<uint32> VoronoiSites);
 	~CVT();
 
 private:
 	void RefreshRegion();
 	void CalculateCentroids();
-	TArray<FVector3f> GenerateNewSite();
-	bool isEqualSites(TArray<FVector3f>& Sites1, TArray<FVector3f>& Sites2);
+	TArray<uint32> GenerateNewSite();
+	bool isEqualSites(TArray<uint32>& Sites1, TArray<uint32>& Sites2);
 };

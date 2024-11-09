@@ -31,7 +31,7 @@ public:
 private:
 	CVT CVT_inst;
 	void VisualizeVertices();
-	TArray<FVector3f> getRandomVoronoiSites(const TArray<FVector3f>& Vertices, int32 SiteNum);
+	TArray<uint32> getRandomVoronoiSites(const TArray<FVector>& Vertices, int32 SiteNum);
 
 	UPROPERTY(VisibleAnywhere)
 	UStaticMeshComponent* MeshComponent;
