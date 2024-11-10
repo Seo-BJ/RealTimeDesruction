@@ -11,22 +11,61 @@
 using namespace Eigen;
 
 class UStaticMeshComponent;
-
+class UTetMeshGenerateComponent;
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class REALTIMEDESRUCTION_API UFEMCalculateComponent : public UActorComponent
 {
 	GENERATED_BODY()
+	friend UTetMeshGenerateComponent;
 
 public:	
 
 	UFEMCalculateComponent();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MaterialLambda;
+	float Lambda;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MaterialMu;
+	float Mu;
+
+	UFUNCTION(BlueprintCallable)
+	float CalculateEnergyAtTatUsingFEM(const FVector& Velocity, const FVector& NextTickVelocity, const float Mass, const FVector& HitPoint);
+
+	// TetWild 매개변수
+
+	//! Energy at which to stop optimizing tet quality and accept the result.
+	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = (ClampMin = "0.0"))
+	double IdealEdgeLength = 0.05;
+
+	//! Maximum number of optimization iterations.
+	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = (ClampMin = "1"))
+	int32 MaxIterations = 80;
+
+	//! Energy at which to stop optimizing tet quality and accept the result.
+	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = (ClampMin = "0.0"))
+	double StopEnergy = 10;
+
+	//! Relative tolerance, controlling how closely the mesh must follow the input surface.z`
+	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = (ClampMin = "0.0"))
+	double EpsRel = 1e-3;
+
+	//! Coarsen the tet mesh result.
+	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = ())
+	bool bCoarsen = true;
+
+	//! Enforce that the output boundary surface should be manifold.
+	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = ())
+	bool bExtractManifoldBoundarySurface = false;
+
+	//! Skip the initial simplification step.
+	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = ())
+	bool bSkipSimplification = false;
+
+	//! Invert tetrahedra.
+	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = ())
+	bool bInvertOutputTets = false;
+
 
 protected:
 
@@ -34,22 +73,90 @@ protected:
 
 private:
 
+	void InitializeTetMesh();
+
+	TArray<float> UndeformedPositions;
+
+	TArray<Matrix<float, 12, 12>> KElements;
+
+	TArray<FVector> TetMeshVertices;
+
+	TArray<FIntVector4> Tets;
+
+	// 에너지 계산
+	float CalculateEnergy(Matrix<float, 4, 4> DmMatrix, Matrix<float, 4, 4> UMatrix, float TetVolume);
+
+	// Ku = F 계산을 통해 변위 행렬 U를 계산
+	Matrix<float, 4, 4> UMatrix(Matrix<float, 9, 9> KMatrix, Matrix<float, 9, 1> FMatrix);
+
+	// Impact Force 행렬 계산
+	Matrix<float, 9, 1> CalculateImpactForceMatrix(
+		const FVector& InitialVelocity,
+		const FVector& NextTickVelocity,
+		const float Mass,
+		const FVector& HitPoint,
+		const TArray<FVector>& TraignleVertices
+	);
+
+
 	// Algorithm 1: Make matrix Dm
-	void CreateDm(const TArray<FVector>& Vertices, TArray<float>& undeformedPositions);
+	void SetUndeformedPositions();
+
+	Matrix<float, 9, 9> SubKMatrix(const Matrix<float, 12, 12> KMatrix, const FInt32Vector3 TriangleIndex);
 
 	// Algorithm 2: Make matrix K
-	void BuildMatrixK(const TArray<float> UndeformedPositions, const TArray<FIntVector4> Tets, TArray<FMatrix>& KElements, float YoungsModulus, float PoissonsRatio);
+	void KMatrix();
 
 	// Algorithm 3: Make matrix B
-	Matrix<float, 6, 12> BuildMatrixB(FMatrix44f MinInverse);
+	Matrix<float, 6, 12> BMatrix(FMatrix44f MinInverse);
 
 	// Algorithm 4: Make matrix E
-	Matrix<float, 6, 6> BuildMatrixE(float Lambda, float Mu);
+	Matrix<float, 6, 6> EMatrix();
 
-	float GetTetraVolume(FIntVector4 Tetra, const TArray<float> UndeformedPositions);
+	float GetTetVolume(FIntVector4 Tetra);
+
+	FInt32Vector4 GetClosestTriangleAndTet(const FVector& HitPosition);
 	
+	float DistanceToTriangle(const FVector& OtherPoint, const FVector& PointA, const FVector& PointB, const FVector& PointC);
+
 	void ConvertArrayToEigenMatrix(const TArray64<float>& InArray, const int32 InRows, const int32 InColumns, Eigen::MatrixXf& OutMatrix);
 
 	UFUNCTION(BlueprintCallable)
 	TArray<FVector3f> GetVerticesFromStaticMesh(UStaticMeshComponent* MeshComponent);
+
+
+	// Matrix 로그 출력 함수
+	template <typename T>
+	void LogMatrix(const T& Matrix)
+	{
+		// 행렬의 크기 얻기
+		int Rows = Matrix.rows();
+		int Cols = Matrix.cols();
+
+		// 행렬의 각 원소를 출력
+		FString MatrixStr = FString::Printf(TEXT("Matrix (%d x %d):\n"), Rows, Cols);
+
+		for (int i = 0; i < Rows; ++i)
+		{
+			FString RowStr;
+			for (int j = 0; j < Cols; ++j)
+			{
+				// 행렬의 원소를 문자열로 변환하여 RowStr에 추가
+				RowStr += FString::Printf(TEXT("%f "), Matrix(i, j));
+			}
+			MatrixStr += RowStr + TEXT("\n");
+		}
+
+		// UE_LOG를 사용하여 출력
+		UE_LOG(LogTemp, Log, TEXT("%s"), *MatrixStr);
+	}
+
+	/*
+	UFUNCTION(BlueprintCallable, Category = "Mesh")
+	FVector GetClosestPositionVertex(UStaticMeshComponent* StaticMeshComponent, FVector HitLocation);
+
+	UFUNCTION(BlueprintCallable, Category = "Mesh")
+	TArray<FVector> GetClosestTriangePositionAtHit(UStaticMeshComponent* StaticMeshComponent, const FHitResult& HitResult);
+	*/
+
 };
