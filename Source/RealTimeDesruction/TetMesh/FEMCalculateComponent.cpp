@@ -113,7 +113,8 @@ void UFEMCalculateComponent::InitializeTetMesh()
 
 float UFEMCalculateComponent::CalculateEnergyAtTatUsingFEM(const FVector& Velocity, const FVector& NextTickVelocity, const float Mass, const FVector& HitPoint)
 {
-    FInt32Vector4 ClosestResult = GetClosestTriangleAndTet(HitPoint);
+    int32 ExcludedIndex = 0;
+    FInt32Vector4 ClosestResult = GetClosestTriangleAndTet(HitPoint, ExcludedIndex);
 
     // Hit했을 때 분석을 할 Tet의 인덱스와 삼각형 면 정점
     int32 TargetTetIndex = ClosestResult[0];
@@ -123,13 +124,33 @@ float UFEMCalculateComponent::CalculateEnergyAtTatUsingFEM(const FVector& Veloci
 
     Matrix<float, 9, 1> F = CalculateImpactForceMatrix(Velocity, NextTickVelocity, Mass, HitPoint, { A, B, C });
     Matrix<float, 9, 9> K = SubKMatrix(KElements[TargetTetIndex], { ClosestResult[1], ClosestResult[2], ClosestResult[3] });
-    Matrix<float, 4, 4> u = UMatrix(K, F);
+    Matrix<float, 4, 4> u = UMatrix(K, F, { ClosestResult[1], ClosestResult[2], ClosestResult[3] }, ExcludedIndex);
     LogMatrix<Matrix<float, 9, 1>>(F);
     LogMatrix<Matrix<float, 9, 9>>(K);
     LogMatrix<Matrix<float, 4, 4>>(u);
+    UE_LOG(LogTemp, Warning, TEXT("Excluded Index = %d"), ExcludedIndex);
     float TargetTetVolume = GetTetVolume(Tets[TargetTetIndex]);
-    Matrix<float, 4, 4> u4x4;
-    return CalculateEnergy(u, u4x4, TargetTetVolume);
+
+    Matrix<float, 4, 4> Dm;
+    TArray<int32> VertexIndex;
+    VertexIndex.Add(Tets[TargetTetIndex].X);
+    VertexIndex.Add(Tets[TargetTetIndex].Y);
+    VertexIndex.Add(Tets[TargetTetIndex].Z);
+    VertexIndex.Add(Tets[TargetTetIndex].W);
+
+    // 4x4 위치 행렬 Dm 생성
+    for (int vtx = 0; vtx < 4; vtx++)
+    {
+        for (int dim = 0; dim < 3; dim++)
+        {
+            Dm(dim, vtx) = UndeformedPositions[3 * VertexIndex[vtx] + dim];
+        }
+    }
+    for (int j = 0; j < 4; j++)
+    {
+        Dm(3, j) = 1;
+    }
+    return CalculateEnergy(Dm, u, TargetTetVolume);
 }
 
 
@@ -156,7 +177,7 @@ float UFEMCalculateComponent::CalculateEnergy(Matrix<float, 4, 4> DmMatrix, Matr
     return Energy;
 }
 
-Matrix<float, 4, 4> UFEMCalculateComponent::UMatrix(Matrix<float, 9, 9> KMatrix, Matrix<float, 9, 1> FMatrix)
+Matrix<float, 4, 4> UFEMCalculateComponent::UMatrix(Matrix<float, 9, 9> KMatrix, Matrix<float, 9, 1> FMatrix, const FInt32Vector3 TriangleIndex, int32 ExcludedIndex)
 {
     Matrix<float, 9, 1> UMatrix9x1;
     Matrix<float, 4, 4> UMatrix4x4;
@@ -164,11 +185,20 @@ Matrix<float, 4, 4> UFEMCalculateComponent::UMatrix(Matrix<float, 9, 9> KMatrix,
     UMatrix4x4.setZero();
     UMatrix9x1 = KMatrix.inverse() * FMatrix;
 
-    for (int Index = 0; Index < 3; Index++)
+    
+    // 1, 2, 3 1, 3, 4  2, 3, 4 1, 2, 4
+    for (int Index = 0; Index < 4; Index++)
     {
-        for (int Dim = 0; Dim < 4; Dim++)
+        for (int Dim = 0; Dim < 3; Dim++)
         {
-            UMatrix4x4(Index, Dim) = UMatrix9x1(3 * Index + Dim, 0);
+            if (Index == ExcludedIndex)
+            {
+                UMatrix4x4(Dim, Index) = 0;
+            }
+            else
+            {
+                UMatrix4x4(Dim, Index) = UMatrix9x1(3 * Index + Dim, 0);
+            }
         }
     }
     for (int col = 0; col < 4; col++)
@@ -389,7 +419,7 @@ TArray<FVector3f> UFEMCalculateComponent::GetVerticesFromStaticMesh(UStaticMeshC
 }
 
 
-FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTet(const FVector& HitPosition)
+FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTet(const FVector& HitPosition, int32& OutExcludedIndex)
 {
     // 가장 가까운 삼각형과의 거리
     float MinDistance = FLT_MAX;
@@ -438,21 +468,25 @@ FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTet(const FVector& Hi
                 Result[1] = 1;
                 Result[2] = 2;
                 Result[3] = 3;
+                OutExcludedIndex = 4;
                 break;
             case 1:
                 Result[1] = 1;
                 Result[2] = 2;
                 Result[3] = 4;
+                OutExcludedIndex = 3;
                 break;
             case 2:
                 Result[1] = 1;
                 Result[2] = 3;
                 Result[3] = 4;
+                OutExcludedIndex = 2;
                 break;
             case 3:
                 Result[1] = 2;
                 Result[2] = 3;
                 Result[3] = 4;
+                OutExcludedIndex = 1;
                 break;
             }
         }

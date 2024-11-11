@@ -87,7 +87,7 @@ private:
 	float CalculateEnergy(Matrix<float, 4, 4> DmMatrix, Matrix<float, 4, 4> UMatrix, float TetVolume);
 
 	// Ku = F 계산을 통해 변위 행렬 U를 계산
-	Matrix<float, 4, 4> UMatrix(Matrix<float, 9, 9> KMatrix, Matrix<float, 9, 1> FMatrix);
+	Matrix<float, 4, 4> UMatrix(Matrix<float, 9, 9> KMatrix, Matrix<float, 9, 1> FMatrix, const FInt32Vector3 TriangleIndex, int32 ExcludedIndex);
 
 	// Impact Force 행렬 계산
 	Matrix<float, 9, 1> CalculateImpactForceMatrix(
@@ -115,7 +115,7 @@ private:
 
 	float GetTetVolume(FIntVector4 Tetra);
 
-	FInt32Vector4 GetClosestTriangleAndTet(const FVector& HitPosition);
+	FInt32Vector4 GetClosestTriangleAndTet(const FVector& HitPosition, int32& OutExcludedIndex);
 	
 	float DistanceToTriangle(const FVector& OtherPoint, const FVector& PointA, const FVector& PointB, const FVector& PointC);
 
