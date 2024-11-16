@@ -21,6 +21,5 @@ private:
 	const TMap<uint32, DistOutEntry>* Distance;
 	uint32 NumVertices;
 	TArray<FVector3f> VerticesToAdd;
-	TArray<FIntVector> IndexToAdd;
 	TSet<uint32> Seed;
 };
