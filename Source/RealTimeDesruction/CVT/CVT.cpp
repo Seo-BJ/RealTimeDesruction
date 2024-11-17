@@ -25,7 +25,7 @@ void CVT::Lloyd_Algo()
         CVT::Sites = CVT::GenerateNewSite();
         CVT::RefreshRegion();
         UE_LOG(LogTemp, Log, TEXT("Lloyd Algorithm is successfully executed."))
-    } while (isEqualSites(CVT::Sites, OldSites));
+    } while (not isEqualSites(CVT::Sites, OldSites));
 }
 
 // 스태틱 메쉬 컴포넌트에서 버텍스 정보 가져오는 함수

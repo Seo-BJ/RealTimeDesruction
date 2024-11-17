@@ -7,6 +7,7 @@
 #include "../TetMesh/TetMeshGenerateComponent.h"
 #include "../CVT/CVT.h"
 #include "../DistanceCalculate/DistanceCalculate.h"
+#include "../SplitMesh/SplitMesh.h"
 #include "VoroTestComponent.generated.h"
 
 

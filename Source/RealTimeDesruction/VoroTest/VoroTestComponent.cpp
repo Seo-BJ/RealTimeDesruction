@@ -51,21 +51,26 @@ void UVoroTestComponent::BeginPlay()
 			CVT_inst.Lloyd_Algo();
 			Sites = CVT_inst.Sites;
 			Region = CVT_inst.Region;
-			VisualizeVertices();
 		}
 
-		// Gen Final Voro
-		
+		Region.Empty();
+		Region.AddUninitialized(TetMeshComponent->TetMeshVertices.Num());
+
+		DistanceCalculate DistCalc;
+		TMap<uint32, DistOutEntry> DistanceMap;
+		DistanceMap = DistCalc.Calculate(TetMeshComponent->Graph, Sites, 3);
+
+		for (const TPair<uint32,DistOutEntry> &dist : DistanceMap)
+			Region[dist.Key] = Sites.Find(dist.Value.Source);
+
+		VisualizeVertices();
 	}
 }
-
 
 // Called every frame
 void UVoroTestComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	// ...
 }
 
 TArray<uint32> UVoroTestComponent::getRandomVoronoiSites(const int32 VeticesSize)
@@ -79,7 +84,7 @@ TArray<uint32> UVoroTestComponent::getRandomVoronoiSites(const int32 VeticesSize
 	{
 		// ·£´ý ÀÎµ¦½º »ý¼º
 		uint32 RandomIndex = FMath::RandRange(0, VeticesSize - 1);
-		SelectedIndices.Add(RandomIndex);
+		SelectedIndices.Emplace(RandomIndex);
 	}
 	VoronoiSites = SelectedIndices.Array();
 	VoronoiSites.Sort();
@@ -94,8 +99,10 @@ void UVoroTestComponent::VisualizeVertices()
 		FVector WorldPosition = GetOwner()->GetActorTransform().TransformPosition(static_cast<FVector>(TetMeshComponent->TetMeshVertices[i]));
 		int32 RegionOfVertex = Region[i];
 
-		if (i == Sites[RegionOfVertex])
-			DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, FColor::Black, true, -1.0f, 0);
+		//DrawDebugString(GetWorld(), WorldPosition + FVector(0, 0, 20), FString::Printf(TEXT("%d"), i));
+
+		if (i == RegionOfVertex)
+			DrawDebugSphere(GetWorld(), WorldPosition, 5.0f, 1.0f, FColor::White, true, -1.0f, 0);
 		else
 			DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, ColorMap[RegionOfVertex % ColorMap.Num()], true, -1.0f, 0);
 	}

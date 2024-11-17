@@ -25,21 +25,23 @@ TMap<uint32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, co
         VisitedBy.Add(i, MakeUnique<std::atomic<uint32>>(i));
     }
 
+    // Source의 최단 경로는 Source
+    for (uint32 i = 0; i < NumSources; i++)
+    {
+        uint32 Src = Sources[i];
+        GlobalDist[Src]->store(0.0);
+        DistOut[Src] = { 0.0, Src };
+        VisitedBy[Src]->store(Src);
+    }
+
     // 병렬 처리
     ParallelFor(NumSources, [&](uint32 i)
     {
         using PII = TPair<double, uint32>;
         std::priority_queue<PII, std::vector<PII>, std::greater<PII>> Q;
 
-        // Source의 최단 경로는 Source
-        uint32 Src = Sources[i];
-        GlobalDist[Src]->store(0.0);
-        DistOut[Src] = { 0.0, Src };
-        VisitedBy[Src]->store(Src);
-
         // 우선 순위 큐에 최초 경로 삽입
-        Q.emplace(0.0, Src);
-
+        Q.emplace(0.0, Sources[i]);
         while (!Q.empty())
         {
             PII Current = Q.top();
@@ -52,11 +54,12 @@ TMap<uint32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, co
                 uint32 v = link.VertexIndex;
 
                 // 이미 유망하지 않다면 탈출
-                if (VisitedBy[v]->load() != v && GlobalDist[v]->load() <= curDist) continue;
+                if (VisitedBy[v]->load() != v && GlobalDist[v]->load() <= curDist)
+                    continue;
 
                 // 다음 경로의 거리 계산
                 double NewDist = recalculateDistance(graph, u, v, GlobalDist[u]->load(), VisitedBy, k);
-
+            
                 // 거리가 짧다면 업데이트
                 if (NewDist < GlobalDist[v]->load())
                 {
@@ -92,7 +95,7 @@ double DistanceCalculate::recalculateDistance(WeightedGraph& graph, const uint32
     // 초기 거리
     const Link* edge = graph.getLink(u, v);
     correctedDist += edge->linkVector.Size() + edge->weight;
-
+    
     {
         // 스레드 락
         std::shared_lock<std::shared_mutex> lock(PredMutex);
