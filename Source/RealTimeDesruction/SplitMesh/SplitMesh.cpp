@@ -32,7 +32,9 @@ TMap<uint32, FIntVector4> SplitMesh::SplitTetra(const FIntVector4& tetra)
 
 	if (Sources.Num() == 1)
 	{
-		Result.Emplace(Sources.begin().Key(), tetra);
+		// Result.Emplace(Sources.begin().Key(), tetra);
+		// Source가 1이라면 경계가 아님
+		// 경계의 사면체만 추가하여 메쉬 최소화
 	}
 	else if (Sources.Num() == 2)
 	{
@@ -216,10 +218,23 @@ TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Te
 	}
 	
 	// 기존 버텍스 추가
-	for (uint32 i = 0; i < PositionVertexBuffer->GetNumVertices(); ++i)
+	for (int32 i = 0; i < IndexBuffer->GetNumIndices(); i += 3)
 	{
-		FVector Position = FVector(PositionVertexBuffer->VertexPosition(i));
-		Vertices[Distance->FindRef(i).Source].Emplace(Position);
+		TArray<int32> Index;
+
+		for (int j = 0; j < 3; ++j)
+		{
+			int32 idx = (int32)IndexBuffer->GetIndex(i + j);
+			FVector vtx = FVector(PositionVertexBuffer->VertexPosition(idx));
+
+			Index.Emplace(idx);
+			Vertices[Distance->FindRef(idx).Source].Emplace(vtx);
+		}
+
+		if (Distance->FindRef(Index[0]).Source == Distance->FindRef(Index[1]).Source == Distance->FindRef(Index[2]).Source)
+		{
+			Triangles.Emplace(Distance->FindRef(Index[0]).Source, Index);
+		}
 	}
 
 	// 사면체 분리 후 시드별 저장
