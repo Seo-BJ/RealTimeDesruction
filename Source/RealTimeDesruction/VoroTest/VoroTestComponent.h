@@ -8,6 +8,9 @@
 #include "../CVT/CVT.h"
 #include "../DistanceCalculate/DistanceCalculate.h"
 #include "../SplitMesh/SplitMesh.h"
+#include "Engine/StaticMeshActor.h"
+#include "ProceduralMeshConversion.h"
+#include "StaticMeshDescription.h"
 #include "VoroTestComponent.generated.h"
 
 
@@ -42,4 +45,5 @@ private:
 
 	TArray<uint32> getRandomVoronoiSites(const int32 VeticesSize);
 	void VisualizeVertices();
+	void DestroyActor(const UTetMeshGenerateComponent* TetComponent, const TMap<uint32, DistOutEntry>* Dist);
 };

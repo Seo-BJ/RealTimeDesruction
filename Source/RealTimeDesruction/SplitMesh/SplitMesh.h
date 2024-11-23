@@ -3,23 +3,26 @@
 #include "CoreMinimal.h"
 #include "../DistanceCalculate/DistanceCalculate.h"
 #include "ProceduralMeshComponent.h"
+#include "../TetMesh/TetMeshGenerateComponent.h"
 
 // Not sure it is working...
 class REALTIMEDESRUCTION_API SplitMesh
 {
 public:
-	SplitMesh(const UStaticMesh* Mesh, const TMap<uint32, DistOutEntry>* Distance);
+	SplitMesh(const UStaticMesh* Mesh, const UTetMeshGenerateComponent* TetMesh, const TMap<uint32, DistOutEntry>* Distance);
 	~SplitMesh() {};
 	FVector3f CalculateSplitPoint(const int32& p1, const int32& p2);
-	TMap<uint32, FIntVector4> SplitTetra(const FIntVector4& tetra);
-	TArray<UProceduralMeshComponent*> Split(const TArray<FIntVector4>& Tets);
+	TMap<uint32, TArray<FIntVector4>> SplitTetra(const FIntVector4& tetra);
+	TMap<uint32, UProceduralMeshComponent*> Split();
 
 private:
 	const UStaticMesh* Mesh;
+	const UTetMeshGenerateComponent* TetMesh;
 	const FPositionVertexBuffer* PositionVertexBuffer;
 	const FRawStaticIndexBuffer* IndexBuffer;
 	const TMap<uint32, DistOutEntry>* Distance;
+	const TArray<FIntVector4>* Tets;
 	uint32 NumVertices;
 	TArray<FVector3f> VerticesToAdd;
-	TSet<uint32> Seed;
+	TArray<uint32> Seed;
 };

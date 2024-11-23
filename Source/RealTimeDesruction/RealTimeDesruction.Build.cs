@@ -11,12 +11,12 @@ public class RealTimeDesruction : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[] { 
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "ProceduralMeshComponent",
 			"GeometryAlgorithms",
-			"Eigen"
+			"Eigen", "StaticMeshDescription", "MeshDescription"
 
 
 
 
-		});
+        });
 
        
     }

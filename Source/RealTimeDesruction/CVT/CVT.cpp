@@ -10,14 +10,14 @@ CVT::~CVT()
 {
 }
 
-// ·ÎÀÌµå ¾Ë°í¸®Áò ½ÃÇà
+// ï¿½ï¿½ï¿½Ìµï¿½ ï¿½Ë°ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 void CVT::Lloyd_Algo()
 {
-    // ¾Ë°í¸®Áò ½ÃÇà Àü ½ÃµåÆ÷ÀÎÆ® TARRAY ÁØºñ
+    // ï¿½Ë°ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ãµï¿½ï¿½ï¿½ï¿½ï¿½Æ® TARRAY ï¿½Øºï¿½
     TArray<uint32> OldSites = CVT::Sites;
 
-    // »õ ½ÃµåÆ÷ÀÎÆ®°¡ ÀÌÀü ½ÃÆ®Æ÷ÀÎÆ®¿Í ÀÏÄ¡ÇÒ¶§±îÁö ¹Ýº¹
-    // º¸·Î³ëÀÌ ¼¿ Àç¼³Á¤ -> °¢ ¼¿ÀÇ ¹«°ÔÁß½É ±¸ÇÏ±â -> ¹«°ÔÁß½É ±âÁØ »õ·Î¿î ½ÃµåÆ÷ÀÎÆ® »ý¼º
+    // ï¿½ï¿½ ï¿½Ãµï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½Ò¶ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ýºï¿½
+    // ï¿½ï¿½ï¿½Î³ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ç¼³ï¿½ï¿½ -> ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ß½ï¿½ ï¿½ï¿½ï¿½Ï±ï¿½ -> ï¿½ï¿½ï¿½ï¿½ï¿½ß½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Î¿ï¿½ ï¿½Ãµï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
     do
     {
         CVT::CalculateCentroids();
@@ -28,11 +28,11 @@ void CVT::Lloyd_Algo()
     } while (not isEqualSites(CVT::Sites, OldSites));
 }
 
-// ½ºÅÂÆ½ ¸Þ½¬ ÄÄÆ÷³ÍÆ®¿¡¼­ ¹öÅØ½º Á¤º¸ °¡Á®¿À´Â ÇÔ¼ö
+// ï¿½ï¿½ï¿½ï¿½Æ½ ï¿½Þ½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ø½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½
 void CVT::GetVertexDataFromStaticMeshComponent(const UStaticMeshComponent* StaticMeshComponent)
 {
     FPositionVertexBuffer* VertexBuffer = &StaticMeshComponent->GetStaticMesh()->GetRenderData()->LODResources[0].VertexBuffers.PositionVertexBuffer;
-    // ¹öÅØ½º ¹öÆÛ°¡ À¯È¿ÇÏ¸é ¼øÈ¸ÇÏ¸ç Vertices¿¡ ¹öÅØ½º ÁÂÇ¥ Ãß°¡
+    // ï¿½ï¿½ï¿½Ø½ï¿½ ï¿½ï¿½ï¿½Û°ï¿½ ï¿½ï¿½È¿ï¿½Ï¸ï¿½ ï¿½ï¿½È¸ï¿½Ï¸ï¿½ Verticesï¿½ï¿½ ï¿½ï¿½ï¿½Ø½ï¿½ ï¿½ï¿½Ç¥ ï¿½ß°ï¿½
     if (VertexBuffer)
     {
         const int32 VertexCount = VertexBuffer->GetNumVertices();
@@ -52,7 +52,7 @@ void CVT::SetVertices(TArray<FVector> new_Vertices)
     Vertices = new_Vertices;
 }
 
-// º¸·Î³ëÀÌ ¼¿ Àç¼³Á¤
+// ï¿½ï¿½ï¿½Î³ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ç¼³ï¿½ï¿½
 void CVT::RefreshRegion()
 {
     CVT::Region.Empty();
@@ -79,10 +79,10 @@ void CVT::RefreshRegion()
         });
 }
 
-// º¸·Î³ëÀÌ ¼¿ÀÇ ¹«°ÔÁß½ÉÀ» °è»ê
+// ï¿½ï¿½ï¿½Î³ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ß½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 void CVT::CalculateCentroids()
 {
-    // º¯¼ö setup
+    // ï¿½ï¿½ï¿½ï¿½ setup
     CVT::BaryCenters.Empty();
     CVT::BaryCenters.AddUninitialized(CVT::Sites.Num());
 
@@ -93,13 +93,13 @@ void CVT::CalculateCentroids()
 
     FCriticalSection Mutex;
 
-    // °¢ ¹öÅØ½º º´·Ä Ã³¸®
+    // ï¿½ï¿½ ï¿½ï¿½ï¿½Ø½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
     ParallelFor(CVT::Vertices.Num(), [&](int32 i)
         {
             int32 RegionIndex = CVT::Region[i];
             FVector Vertex = CVT::Vertices[i];
 
-            // ¹ÂÅØ½º¸¦ Àá±Å¼­ µ¿±âÈ­
+            // ï¿½ï¿½ï¿½Ø½ï¿½ï¿½ï¿½ ï¿½ï¿½Å¼ï¿½ ï¿½ï¿½ï¿½ï¿½È­
             {
                 FScopeLock Lock(&Mutex);
                 RegionSum[RegionIndex] += Vertex;
@@ -107,7 +107,7 @@ void CVT::CalculateCentroids()
             }
         });
 
-    // ¹«°ÔÁß½É ÁÂÇ¥¸¦ °è»ê
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ß½ï¿½ ï¿½ï¿½Ç¥ï¿½ï¿½ ï¿½ï¿½ï¿½
     for (int32 i = 0; i < CVT::Sites.Num(); i++)
     {
         if (RegionCount[i] > 0)
@@ -116,11 +116,11 @@ void CVT::CalculateCentroids()
         }
         else
         {
-            CVT::BaryCenters[i] = FVector(0, 0, 0);  // ºó ¼¿ÀÇ °æ¿ì (ÇÊ¿ä½Ã ´Ù¸¥ Ã³¸®)
+            CVT::BaryCenters[i] = FVector(0, 0, 0);  // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ (ï¿½Ê¿ï¿½ï¿½ ï¿½Ù¸ï¿½ Ã³ï¿½ï¿½)
         }
     }
 }
-// ¹«°ÔÁß½ÉÀ» ±âÁØÀ¸·Î »õ·Î¿î ½Ãµå Æ÷ÀÎÆ® »ý¼º
+// ï¿½ï¿½ï¿½ï¿½ï¿½ß½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Î¿ï¿½ ï¿½Ãµï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 TArray<uint32> CVT::GenerateNewSite()
 {
     TArray<uint32> NewSites;
@@ -150,7 +150,7 @@ TArray<uint32> CVT::GenerateNewSite()
     return NewSites;
 }
 
-// »õ ½Ãµå Æ÷ÀÎÆ®°¡ ÀÌÀü°ú µ¿ÀÏÇÑÁö °Ë»ç
+// ï¿½ï¿½ ï¿½Ãµï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ë»ï¿½
 bool CVT::isEqualSites(TArray<uint32>& Sites1, TArray<uint32>& Sites2)
 {
     for (int32 i = 0; i < Sites1.Num(); ++i)
