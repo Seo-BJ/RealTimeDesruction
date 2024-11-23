@@ -8,6 +8,7 @@
 #include "../CVT/CVT.h"
 #include "../DistanceCalculate/DistanceCalculate.h"
 #include "../SplitMesh/SplitMesh.h"
+#include "../SplitedActor/SplitedActor.h"
 #include "VoroTestComponent.generated.h"
 
 
@@ -39,7 +40,9 @@ private:
 	UTetMeshGenerateComponent* TetMeshComponent = nullptr;
 	TArray<uint32> Sites;
 	TArray<uint32> Region;
+	TArray<UProceduralMeshComponent*> Splited_Meshes;
 
 	TArray<uint32> getRandomVoronoiSites(const int32 VeticesSize);
 	void VisualizeVertices();
+	void SpawnSplitedMesh(UWorld* World, UProceduralMeshComponent* Mesh);
 };

@@ -63,7 +63,21 @@ void UVoroTestComponent::BeginPlay()
 		for (const TPair<uint32,DistOutEntry> &dist : DistanceMap)
 			Region[dist.Key] = Sites.Find(dist.Value.Source);
 
-		VisualizeVertices();
+		//VisualizeVertices();
+
+		UStaticMeshComponent* MeshComponent = GetOwner()->FindComponentByClass<UStaticMeshComponent>();
+		SplitMesh Spliter = SplitMesh(MeshComponent->GetStaticMesh(), &DistanceMap);
+		Spliter.SetConvertedVertices(&TetMeshComponent->PolyVertexPositionInTet, &TetMeshComponent->PolyVertexIndexInTet);
+		Spliter.SetSeed(Sites);
+		Spliter.SetTetVertices(&(TetMeshComponent->TetMeshVertices));
+		Splited_Meshes = Spliter.Split(TetMeshComponent->Tets);
+
+		for (const auto Mesh : Splited_Meshes)
+		{
+			ASplitedActor* NewActor = GetWorld()->SpawnActor<ASplitedActor>(ASplitedActor::StaticClass(), FVector(1340, 970, 200), FRotator::ZeroRotator);
+			NewActor->SetProceduralMesh(Mesh, MeshComponent->GetMaterial(0));
+			//UE_LOG(LogTemp, Display, TEXT("CHECK POINT"));
+		}
 	}
 }
 
