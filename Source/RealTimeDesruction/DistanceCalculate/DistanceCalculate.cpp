@@ -35,7 +35,8 @@ TMap<uint32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, co
     }
 
     // 병렬 처리
-    ParallelFor(NumSources, [&](uint32 i)
+    //ParallelFor(NumSources, [&](uint32 i)
+    for (uint32 i = 0; i < NumSources; i++)
     {
         using PII = TPair<double, uint32>;
         std::priority_queue<PII, std::vector<PII>, std::greater<PII>> Q;
@@ -59,7 +60,7 @@ TMap<uint32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, co
 
                 // 다음 경로의 거리 계산
                 double NewDist = recalculateDistance(graph, u, v, GlobalDist[u]->load(), VisitedBy, k);
-            
+
                 // 거리가 짧다면 업데이트
                 if (NewDist < GlobalDist[v]->load())
                 {
@@ -74,7 +75,8 @@ TMap<uint32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, co
                 }
             }
         }
-    });
+        //});
+    }
 
     // 결과
     TMap<uint32, DistOutEntry> Result;
