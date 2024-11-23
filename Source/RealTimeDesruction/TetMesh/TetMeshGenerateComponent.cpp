@@ -93,8 +93,8 @@ void UTetMeshGenerateComponent::BeginPlay()
 		//	const FIntVector4& Tet = Tets[i];
 		//	UE_LOG(LogTemp, Display, TEXT("Tet %d: V0=%d, V1=%d, V2=%d, V3=%d"), i, Tet.X, Tet.Y, Tet.Z, Tet.W);
 		//}
-
-		GenerateGraphFromTets();
+		ConvertVertexIndexToTet(GetOwner()->FindComponentByClass<UStaticMeshComponent>()->GetStaticMesh());
+		GenerateGraphFromTets();			
 	}
 	else
 	{
@@ -120,5 +120,36 @@ void UTetMeshGenerateComponent::GenerateGraphFromTets()
 		Graph.addLink(Tet.X, Tet.W, Vertex_W - Vertex_X);
 		Graph.addLink(Tet.Y, Tet.W, Vertex_W - Vertex_Y);
 		Graph.addLink(Tet.Z, Tet.W, Vertex_W - Vertex_Z);
+	}
+}
+
+void UTetMeshGenerateComponent::ConvertVertexIndexToTet(UStaticMesh* StaticMesh)
+{
+	const FStaticMeshLODResources& LODResources = StaticMesh->GetRenderData()->LODResources[0];
+	const FPositionVertexBuffer* PositionBuffer = &LODResources.VertexBuffers.PositionVertexBuffer;
+	const FRawStaticIndexBuffer* IndexBuffer = &LODResources.IndexBuffer;
+	const int32 NumVertex = PositionBuffer->GetNumVertices();
+	const int32 NumIndex = IndexBuffer->GetNumIndices();
+
+	// init
+	PolyVertexPositionInTet.SetNum(NumVertex);
+	PolyVertexIndexInTet.SetNum(NumIndex);
+
+	// Convert Position First
+	for (int32 i = 0; i < NumVertex; ++i)
+	{
+		for (int32 j = 0; j < TetMeshVertices.Num(); ++j)
+		{
+			if (TetMeshVertices[j].Equals(static_cast<FVector>(PositionBuffer->VertexPosition(i))))
+			{
+				PolyVertexPositionInTet[i] = j;
+				break;
+			}
+		}
+	}
+
+	for (int32 i = 0; i < NumIndex; ++i)
+	{
+		PolyVertexIndexInTet[i] = PolyVertexPositionInTet[IndexBuffer->GetIndex(i)];
 	}
 }

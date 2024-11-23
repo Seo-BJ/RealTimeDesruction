@@ -60,6 +60,8 @@ public:
 	TArray<FIntVector4> Tets;
 
 	WeightedGraph Graph{ false };
+	TArray<uint32> PolyVertexPositionInTet;
+	TArray<uint32> PolyVertexIndexInTet;
 
 protected:
 	// Called when the game starts
@@ -68,4 +70,5 @@ protected:
 
 private:
 	void GenerateGraphFromTets();
+	void ConvertVertexIndexToTet(UStaticMesh* StaticMesh);
 };

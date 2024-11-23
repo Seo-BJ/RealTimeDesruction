@@ -13,6 +13,9 @@ public:
 	FVector3f CalculateSplitPoint(const int32& p1, const int32& p2);
 	TMap<uint32, FIntVector4> SplitTetra(const FIntVector4& tetra);
 	TArray<UProceduralMeshComponent*> Split(const TArray<FIntVector4>& Tets);
+	void SetSeed(const TArray<uint32> Site);
+	void SetTetVertices(const TArray<FVector>* TVertices);
+	void SetConvertedVertices(const TArray<uint32>* Position, const TArray<uint32>* Index);
 
 private:
 	const UStaticMesh* Mesh;
@@ -22,4 +25,7 @@ private:
 	uint32 NumVertices;
 	TArray<FVector3f> VerticesToAdd;
 	TSet<uint32> Seed;
+	const TArray<FVector>* TetVertices;
+	const TArray<uint32>* PolyVertexPositionInTet;
+	const TArray<uint32>* PolyVertexIndexInTet;
 };

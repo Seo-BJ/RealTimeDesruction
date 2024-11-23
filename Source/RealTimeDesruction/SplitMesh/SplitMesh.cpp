@@ -9,14 +9,32 @@ SplitMesh::SplitMesh(const UStaticMesh* Mesh, const TMap<uint32, DistOutEntry>* 
 	NumVertices = LODResources.GetNumVertices();
 }
 
+void SplitMesh::SetSeed(const TArray<uint32> Site)
+{
+	for (const uint32 s : Site)
+		Seed.Emplace(s);
+}
+
+void SplitMesh::SetTetVertices(const TArray<FVector>* TVertices)
+{
+	TetVertices = TVertices;
+	NumVertices = TVertices->Num();
+}
+
+void SplitMesh::SetConvertedVertices(const TArray<uint32>* Position, const TArray<uint32>* Index)
+{
+	PolyVertexPositionInTet = Position;
+	PolyVertexIndexInTet = Index;
+}
+
 // 그래프 거리 기반 사면체 분리 위치 계산
 FVector3f SplitMesh::CalculateSplitPoint(const int32& p1, const int32& p2)
 {
-	FVector3f Point1 = PositionVertexBuffer->VertexPosition(p1);
-	FVector3f Point2 = PositionVertexBuffer->VertexPosition(p2);
+	FVector Point1 = (*TetVertices)[p1];
+	FVector Point2 = (*TetVertices)[p2];
 	double Dist = (Point1 - Point2).Size();
 	double Weight = (((Distance->FindRef(p1).Weight + Distance->FindRef(p2).Weight + Dist) / 2) - Distance->FindRef(p2).Weight) / Dist;
-	return Point1 + ((Point2 - Point1) * (1 - Weight));
+	return FVector3f(Point1 + ((Point2 - Point1) * (1 - Weight)));
 }
 
 // 버텍스가 어느 Seed에 속하는지에 따른 사면체 분리
@@ -25,9 +43,16 @@ TMap<uint32, FIntVector4> SplitMesh::SplitTetra(const FIntVector4& tetra)
 	TMap<uint32, FIntVector4> Result;
 	TMap<uint32, TArray<uint32>> Sources;
 
-	for (int i = 0; i < 4; ++i)
+	for (uint32 i = 0; i < 4; ++i)
 	{
-		Sources[Distance->FindRef(tetra[i]).Source].Emplace(tetra[i]);
+		if (Sources.Contains(Distance->FindRef(tetra[i]).Source))
+			Sources[Distance->FindRef(tetra[i]).Source].Emplace(tetra[i]);
+		else
+		{
+			TArray<uint32> Arr = TArray<uint32>();
+			Arr.Emplace(tetra[i]);
+			Sources.Emplace(Distance->FindRef(tetra[i]).Source, Arr);
+		}
 	}
 
 	if (Sources.Num() == 1)
@@ -196,7 +221,7 @@ TMap<uint32, FIntVector4> SplitMesh::SplitTetra(const FIntVector4& tetra)
 		Result.Emplace(Source4.Key(), FIntVector4(NewIndexM13, NewIndexM23, NewIndexM03, NewIndexM02));
 	}
 
-	Sources.GetKeys(Seed);
+	//Sources.GetKeys(Seed);
 	return Result;
 }
 
@@ -204,9 +229,14 @@ TMap<uint32, FIntVector4> SplitMesh::SplitTetra(const FIntVector4& tetra)
 TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Tets)
 {
 	TArray<UProceduralMeshComponent*> Meshes;
+
+	// 각 보로노이 셀에 속한 사면체
 	TMap<uint32, TArray<FIntVector4>> TetMesh;
+
 	std::mutex m;
 	TMap<uint32, uint32> Idx;
+
+	// 각 보로노이 셀에 속한 버텍스와 삼각형들
 	TMap<uint32, TArray<FVector>> Vertices;
 	TMap<uint32, TArray<int32>> Triangles;
 
@@ -222,23 +252,42 @@ TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Te
 	{
 		TArray<int32> Index;
 
+		// 삼각형의 인덱스를 받아서 Distance 맵에서 그 인덱스로 접근해서 Vertices에 저장
 		for (int j = 0; j < 3; ++j)
 		{
-			int32 idx = (int32)IndexBuffer->GetIndex(i + j);
-			FVector vtx = FVector(PositionVertexBuffer->VertexPosition(idx));
+			//int32 idx = (int32)IndexBuffer->GetIndex(i + j);
+			int32 idx = (*PolyVertexIndexInTet)[i + j];
+			FVector vtx = (*TetVertices)[idx];
 
 			Index.Emplace(idx);
-			Vertices[Distance->FindRef(idx).Source].Emplace(vtx);
+
+			if (Vertices.Contains(Distance->FindRef(idx).Source))
+				Vertices[Distance->FindRef(idx).Source].Emplace(vtx);
+			else
+			{
+				TArray<FVector> Arr = TArray<FVector>();
+				Arr.Emplace(vtx);
+				Vertices.Emplace(Distance->FindRef(idx).Source, Arr);
+			}
 		}
 
-		if (Distance->FindRef(Index[0]).Source == Distance->FindRef(Index[1]).Source == Distance->FindRef(Index[2]).Source)
+		//UE_LOG(LogTemp, Display, TEXT("CHECK POINT1 : %d"), Distance->FindRef(Index[0]).Source);
+		//UE_LOG(LogTemp, Display, TEXT("CHECK POINT2 : %d"), Distance->FindRef(Index[1]).Source);
+		//UE_LOG(LogTemp, Display, TEXT("CHECK POINT3 : %d"), Distance->FindRef(Index[2]).Source);
+
+		bool flag_same_tri1 = Distance->FindRef(Index[0]).Source == Distance->FindRef(Index[1]).Source;
+		bool flag_same_tri2 = Distance->FindRef(Index[1]).Source == Distance->FindRef(Index[2]).Source;
+
+		// 만약 삼각형이 동일한 보로노이 셀에 있다면 tri에 추가
+		if (flag_same_tri1 && flag_same_tri2)
 		{
 			Triangles.Emplace(Distance->FindRef(Index[0]).Source, Index);
 		}
 	}
 
 	// 사면체 분리 후 시드별 저장
-	ParallelFor(Tets.Num(), [&](uint32 i)
+	//ParallelFor(Tets.Num(), [&](uint32 i)
+	for(uint32 i = 0; i < (uint32)Tets.Num(); i++)
 		{
 			auto result = SplitTetra(Tets[i]);
 			for (auto& r : result)
@@ -246,7 +295,8 @@ TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Te
 				std::unique_lock<std::mutex> lock(m);
 				TetMesh.FindRef(r.Key).Emplace(r.Value);
 			}
-		});
+			//});
+		}
 	
 	for (auto& tet : TetMesh)
 	{
@@ -265,9 +315,9 @@ TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Te
 			for (int i = 0; i < 4; ++i)
 			{
 				FVector VertexPos;
-				if ((uint32)t[i] < PositionVertexBuffer->GetNumVertices())
+				if (PolyVertexPositionInTet->Contains((uint32)t[i]))
 				{
-					VertexPos = FVector(PositionVertexBuffer->VertexPosition(t[i]));
+					VertexPos = (*TetVertices)[t[i]];
 				}
 				else
 				{
@@ -313,6 +363,8 @@ TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Te
 		}
 	}
 	
+
+
 	// 새 메쉬 추가
 	for (auto& MeshKey : Idx)
 	{
@@ -329,6 +381,8 @@ TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Te
 				TArray<FProcMeshTangent>(),
 				true 
 			);
+			UE_LOG(LogTemp, Display, TEXT("CHECK POINT1 : %d"), Vertices[MeshKey.Key].Num());
+			UE_LOG(LogTemp, Display, TEXT("CHECK POINT2 : %d"), Triangles[MeshKey.Key].Num());
 		}
 	}
 
