@@ -102,18 +102,22 @@ private:
 	// Algorithm 1: Make matrix Dm
 	void SetUndeformedPositions();
 
-	Matrix<float, 9, 9> SubKMatrix(const Matrix<float, 12, 12> KMatrix, const FInt32Vector3 TriangleIndex);
+	Matrix<float, 9, 9>SubKMatrix(const Matrix<float, 12, 12> KMatrix, const int32 ExcludedIndex);
 
 	// Algorithm 2: Make matrix K
 	void KMatrix();
 
 	// Algorithm 3: Make matrix B
-	Matrix<float, 6, 12> BMatrix(FMatrix44f MinInverse);
+	Matrix<float, 6, 12> BMatrix(Matrix<float, 4, 3> Matrix);
+
+	Matrix<float, 3, 3> Jacobian(Matrix<float, 3, 4> PositionMatrix);
+
+
 
 	// Algorithm 4: Make matrix E
 	Matrix<float, 6, 6> EMatrix();
 
-	float GetTetVolume(FIntVector4 Tetra);
+	float GetTetVolume(Matrix<float, 3, 3> Jaco);
 
 	FInt32Vector4 GetClosestTriangleAndTet(const FVector& HitPosition, int32& OutExcludedIndex);
 	
@@ -125,17 +129,17 @@ private:
 	TArray<FVector3f> GetVerticesFromStaticMesh(UStaticMeshComponent* MeshComponent);
 
 
-	// Matrix 로그 출력 함수
 	template <typename T>
-	void LogMatrix(const T& Matrix)
+	void LogMatrix(const T& Matrix, const FString& MatrixName)
 	{
 		// 행렬의 크기 얻기
 		int Rows = Matrix.rows();
 		int Cols = Matrix.cols();
 
-		// 행렬의 각 원소를 출력
-		FString MatrixStr = FString::Printf(TEXT("Matrix (%d x %d):\n"), Rows, Cols);
+		// 로그 헤더 생성
+		FString MatrixStr = FString::Printf(TEXT("%s Matrix (%d x %d): = \n"), *MatrixName, Rows, Cols);
 
+		// 행렬의 각 원소를 출력
 		for (int i = 0; i < Rows; ++i)
 		{
 			FString RowStr;

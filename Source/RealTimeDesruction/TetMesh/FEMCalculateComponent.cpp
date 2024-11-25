@@ -11,19 +11,16 @@
 
 using namespace Eigen;
 
-// Sets default values for this component's properties
 UFEMCalculateComponent::UFEMCalculateComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 
 }
-// Called when the game starts
 void UFEMCalculateComponent::BeginPlay()
 {
 	Super::BeginPlay();
     InitializeTetMesh();
 }
-
 void UFEMCalculateComponent::InitializeTetMesh()
 {
     // StaticMesh로 부터
@@ -123,15 +120,18 @@ float UFEMCalculateComponent::CalculateEnergyAtTatUsingFEM(const FVector& Veloci
     FVector C = TetMeshVertices[ClosestResult[3]];
 
     Matrix<float, 9, 1> F = CalculateImpactForceMatrix(Velocity, NextTickVelocity, Mass, HitPoint, { A, B, C });
-    Matrix<float, 9, 9> K = SubKMatrix(KElements[TargetTetIndex], { ClosestResult[1], ClosestResult[2], ClosestResult[3] });
+    Matrix<float, 9, 9> K = SubKMatrix(KElements[TargetTetIndex], ExcludedIndex);
     Matrix<float, 4, 4> u = UMatrix(K, F, { ClosestResult[1], ClosestResult[2], ClosestResult[3] }, ExcludedIndex);
-    LogMatrix<Matrix<float, 9, 1>>(F);
-    LogMatrix<Matrix<float, 9, 9>>(K);
-    LogMatrix<Matrix<float, 4, 4>>(u);
-    UE_LOG(LogTemp, Warning, TEXT("Excluded Index = %d"), ExcludedIndex);
-    float TargetTetVolume = GetTetVolume(Tets[TargetTetIndex]);
+
+    LogMatrix<Matrix<float, 12, 12>>(KElements[TargetTetIndex], "Origin Matrix K");
+    LogMatrix<Matrix<float, 9, 1>>(F, "F");
+    //LogMatrix<Matrix<float, 9, 9>>(K, "Sub Matrix K");
+    LogMatrix<Matrix<float, 4, 4>>(u, "u");
+    //UE_LOG(LogTemp, Warning, TEXT("Excluded Index = %d"), ExcludedIndex);
+    //UE_LOG(LogTemp, Warning, TEXT("K Determinant : %f"), K.determinant());
 
     Matrix<float, 4, 4> Dm;
+    Matrix<float, 3, 4> Dm2;
     TArray<int32> VertexIndex;
     VertexIndex.Add(Tets[TargetTetIndex].X);
     VertexIndex.Add(Tets[TargetTetIndex].Y);
@@ -143,13 +143,17 @@ float UFEMCalculateComponent::CalculateEnergyAtTatUsingFEM(const FVector& Veloci
     {
         for (int dim = 0; dim < 3; dim++)
         {
-            Dm(dim, vtx) = UndeformedPositions[3 * VertexIndex[vtx] + dim];
+            Dm(dim, vtx) = UndeformedPositions[3 * VertexIndex[vtx] + dim]/ 100;
+            Dm2(dim, vtx) = UndeformedPositions[3 * VertexIndex[vtx] + dim]/ 100;
         }
     }
     for (int j = 0; j < 4; j++)
     {
         Dm(3, j) = 1;
     }
+    Matrix<float, 3, 3> Jaco = Jacobian(Dm2);
+    float TargetTetVolume = GetTetVolume(Jaco);
+    //UE_LOG(LogTemp, Warning, TEXT("Target Tet Volume : %f"), TargetTetVolume);
     return CalculateEnergy(Dm, u, TargetTetVolume);
 }
 
@@ -158,10 +162,22 @@ float UFEMCalculateComponent::CalculateEnergyAtTatUsingFEM(const FVector& Veloci
 float UFEMCalculateComponent::CalculateEnergy(Matrix<float, 4, 4> DmMatrix, Matrix<float, 4, 4> UMatrix, float TetVolume)
 {
     Matrix<float, 4, 4> DsMatrix = DmMatrix + UMatrix;
+    LogMatrix<Matrix<float, 4, 4>>(DmMatrix, "Dm Matrix");
+    LogMatrix<Matrix<float, 4, 4>>(UMatrix, "U Matrix");
+    LogMatrix<Matrix<float, 4, 4>>(DsMatrix, "Ds Matrix");
+
     Matrix<float, 4, 4> GMatrix = DsMatrix * DmMatrix.inverse();
+    LogMatrix<Matrix<float, 4, 4>>(GMatrix, "GMatrix");
+
     Matrix<float, 4, 4> Identity;
-    Identity.Identity();
+    Identity.setZero();
+    Identity(0, 0) = 1;
+    Identity(1, 1) = 1;
+    Identity(2, 2) = 1;
+    Identity(3, 3) = 1;
+    LogMatrix<Matrix<float, 4, 4>>(Identity, "Identity Matrix");
     Matrix<float, 4, 4> StrainTensorMatrix = (GMatrix + GMatrix.transpose()) / 2 - Identity;
+    LogMatrix<Matrix<float, 4, 4>>(StrainTensorMatrix, "Strain Tensor Matrix");
     float DoubleDotProduct = 0.f;
     for (int i = 0; i < 4; i++)
     {
@@ -184,9 +200,9 @@ Matrix<float, 4, 4> UFEMCalculateComponent::UMatrix(Matrix<float, 9, 9> KMatrix,
     UMatrix9x1.setZero();
     UMatrix4x4.setZero();
     UMatrix9x1 = KMatrix.inverse() * FMatrix;
-
-    
-    // 1, 2, 3 1, 3, 4  2, 3, 4 1, 2, 4
+   LogMatrix<Matrix<float, 9, 1>>(UMatrix9x1, "U Matrix 9 x 1");
+   LogMatrix<Matrix<float, 9, 9>>(KMatrix.inverse(), "K Inverse");
+   UE_LOG(LogTemp, Warning, TEXT("Sub K Determinant : %f"), KMatrix.determinant());
     for (int Index = 0; Index < 4; Index++)
     {
         for (int Dim = 0; Dim < 3; Dim++)
@@ -197,7 +213,7 @@ Matrix<float, 4, 4> UFEMCalculateComponent::UMatrix(Matrix<float, 9, 9> KMatrix,
             }
             else
             {
-                UMatrix4x4(Dim, Index) = UMatrix9x1(3 * Index + Dim, 0);
+                UMatrix4x4(Dim, Index) = UMatrix9x1(3 * Index + Dim, 0) / 100;
             }
         }
     }
@@ -210,7 +226,7 @@ Matrix<float, 4, 4> UFEMCalculateComponent::UMatrix(Matrix<float, 9, 9> KMatrix,
 
 Matrix<float, 9, 1> UFEMCalculateComponent::CalculateImpactForceMatrix(const FVector& InitialVelocity, const FVector& NextTickVelocity, const float Mass, const FVector& HitPoint, const TArray<FVector>& TraignleVertices)
 {
-    const float DeltaTime = 0.1;
+    const float DeltaTime = 0.01;
     const FVector DeltaVelocity = NextTickVelocity - InitialVelocity;
     const  FVector ImpactForce = (Mass * DeltaVelocity) / DeltaTime;
 
@@ -218,39 +234,29 @@ Matrix<float, 9, 1> UFEMCalculateComponent::CalculateImpactForceMatrix(const FVe
     ImpactForceMatrix.setZero();
 
     // 가중치 계산을 위해 삼각형의 각 점과 HitPosition으로부터 떨어진 거리를 계산.
-    float TotalDistance = 0.0f;
     TArray<float> Distances = {0, 0, 0};
     for (int index = 0; index < 3; index++)
     {
         Distances[index] = (TraignleVertices[index] - HitPoint).Size();
-        TotalDistance += Distances[index];
     }
-
+    float WeightSum = 0.f;
     for (int i = 0; i < 3; ++i)
     {
-        float Weight = 1.0f - (Distances[i] / TotalDistance);
+        float Weight = 1/Distances[i] * (Distances[0]* Distances[1]* Distances[2])/(Distances[0]* Distances[1] + Distances[1]* Distances[2] + Distances[0]* Distances[2]);
 
         // 각 정점에 대한 x, y, z 성분에 충격력 분배
         ImpactForceMatrix(i * 3 + 0, 0) = ImpactForce.X * Weight;
         ImpactForceMatrix(i * 3 + 1, 0) = ImpactForce.Y * Weight;
         ImpactForceMatrix(i * 3 + 2, 0) = ImpactForce.Z * Weight;
+        WeightSum += Weight;
     }
-
+    UE_LOG(LogTemp, Warning, TEXT("Weigh Sum = %f"), WeightSum);
     return ImpactForceMatrix;
 }
 
-Matrix<float, 9, 9> UFEMCalculateComponent::SubKMatrix(const Matrix<float, 12, 12> KMatrix, const FInt32Vector3 TriangleIndex)
+Matrix<float, 9, 9> UFEMCalculateComponent::SubKMatrix(const Matrix<float, 12, 12> KMatrix, const int32 ExcludedIndex)
 {
-    // 면에 포함된 정점의 인덱스
-    TArray<int> DOFIndices;
-    DOFIndices.SetNum(9);
-    for (int i = 0; i < 3; ++i)
-    {
-        int VertexIndex = TriangleIndex[i];
-        DOFIndices[i * 3 + 0] = VertexIndex * 3 + 0;  // x 
-        DOFIndices[i * 3 + 1] = VertexIndex * 3 + 1;  // y 
-        DOFIndices[i * 3 + 2] = VertexIndex * 3 + 2;  // z 
-    }
+    // To do: Triangle Index가 1, 2, 3, 4로 이루어져 있음. (0부터 시작하지 않음.) 수정 필요??
 
     // 9x9 서브 행렬을 생성
     Matrix<float, 9, 9> SubMatrix;
@@ -260,7 +266,17 @@ Matrix<float, 9, 9> UFEMCalculateComponent::SubKMatrix(const Matrix<float, 12, 1
     {
         for (int j = 0; j < 9; j++)
         {
-            SubMatrix(i, j) = KMatrix(DOFIndices[i], DOFIndices[j]);
+            int TargetRow = i;
+            int TargetCol = j;
+            if (i >= (ExcludedIndex- 1) * 3)
+            {
+                TargetRow += 3;
+            }
+            if (j >= (ExcludedIndex-1) * 3)
+            {
+                TargetCol += 3;
+            }
+            SubMatrix(i, j) = KMatrix(TargetRow, TargetCol);
         }
     }
     return SubMatrix;
@@ -285,9 +301,8 @@ void UFEMCalculateComponent::KMatrix()
     // 각 사면체체 마다 반복문 실행
     for (int32 i = 0; i < Tets.Num(); i++)
     {
-        FMatrix44f Dm;;
-        FMatrix44f Mininverse;
-        
+        Matrix<float, 3, 4> Demention;
+        Matrix<float, 4, 4> MinInverse;
         // 4개의 버텍스 인덱스 가져오기
         TArray<int32> VertexIndex;
         VertexIndex.Add(Tets[i].X);
@@ -295,43 +310,70 @@ void UFEMCalculateComponent::KMatrix()
         VertexIndex.Add(Tets[i].Z);
         VertexIndex.Add(Tets[i].W);
         
-        // 4x4 위치 행렬 Dm 생성
+        // 3x4 위치 행렬 Dm 생성
         for (int vtx = 0; vtx < 4; vtx++)
         {
             for (int dim = 0; dim < 3; dim++)
             {
-                Dm.M[dim][vtx] = UndeformedPositions[3 * VertexIndex[vtx] + dim];
+                Demention(dim, vtx) = UndeformedPositions[3 * VertexIndex[vtx] + dim];
             }
         }
-        for (int j = 0; j < 4; j++)
-        {
-            Dm.M[3][j] = 1;
-        }
-
-        Mininverse = Dm.Inverse();
-        Matrix<float, 6, 12> MatrixB = BMatrix(Mininverse);
+        // 자코비안 행렬 계산
+        Matrix<float, 3, 3> Jaco = Jacobian(Demention);
+        LogMatrix<Matrix<float, 3, 3>>(Jaco, "Jacobian 3 x 3");
+        UE_LOG(LogTemp, Warning, TEXT("Jaco Determinant : %f"), Jaco.determinant());
+        // 형상함수 행렬 계산.
+        Matrix<float, 4, 3> ShapeFunctionDiffMatrix;
+        ShapeFunctionDiffMatrix.setZero();
+        ShapeFunctionDiffMatrix(0, 0) = -1;
+        ShapeFunctionDiffMatrix(0, 1) = -1;
+        ShapeFunctionDiffMatrix(0, 2) = -1;
+        ShapeFunctionDiffMatrix(1, 0) = 1;
+        ShapeFunctionDiffMatrix(2, 1) = 1;
+        ShapeFunctionDiffMatrix(3, 2) = 1;
+        // 최종 형상함수를 각 x, y, z 성분에 대한 미분 행렬 계산.
+        Matrix<float, 4, 3> Result = ShapeFunctionDiffMatrix * Jaco.inverse();
+        float Volume = GetTetVolume(Jaco);
+        UE_LOG(LogTemp, Warning, TEXT("Volume : %f"), Volume);
+        Matrix<float, 6, 12> MatrixB = BMatrix(Result)/ (Volume);
         Matrix<float, 6, 6> MatrixE = EMatrix();
-        Matrix<float, 6, 12> MatrixEB = MatrixE * MatrixB;
-        float Volume = GetTetVolume(Tets[i]);
-        KElements[i] = Volume * MatrixB.transpose() * MatrixEB;
+
+        KElements[i] = Volume * MatrixB.transpose() * MatrixE * MatrixB;
     }
 }
-Matrix<float, 6, 12> UFEMCalculateComponent::BMatrix(FMatrix44f MinInverse)
+Matrix<float, 6, 12> UFEMCalculateComponent::BMatrix(Matrix<float, 4, 3> Matrix)
 {
     const TArray64<float> ArrayB =
     {
-        MinInverse.M[0][0],     0,                      0,                  MinInverse.M[1][0], 0,                  0,                  MinInverse.M[2][0], 0,                  0,                  MinInverse.M[3][0], 0,                  0,
-        0,                      MinInverse.M[0][1],     0,                  0,                  MinInverse.M[1][1], 0,                  0,                  MinInverse.M[2][1], 0,                  0,                  MinInverse.M[3][1], 0,
-        0,                      0,                      MinInverse.M[0][2], 0,                  0,                  MinInverse.M[1][2], 0,                  0,                  MinInverse.M[2][2], 0,                  0,                   MinInverse.M[3][2],
-        MinInverse.M[0][1],     MinInverse.M[0][0],     0,                  MinInverse.M[1][1], MinInverse.M[1][0], 0,                  MinInverse.M[2][1], MinInverse.M[2][0], 0,                  MinInverse.M[3][1], MinInverse.M[3][0], 0,
-        0,                      MinInverse.M[0][2],     MinInverse.M[0][1], 0,                  MinInverse.M[1][2], MinInverse.M[1][1], 0,                  MinInverse.M[2][2], MinInverse.M[2][1], 0,                  MinInverse.M[3][2], MinInverse.M[3][1],
-        MinInverse.M[0][2],     0,                      MinInverse.M[0][0], MinInverse.M[1][2], 0,                  MinInverse.M[1][0], MinInverse.M[2][2], 0,                  MinInverse.M[2][0], MinInverse.M[3][2], 0,                  MinInverse.M[3][0]
+        Matrix(0,0), 0, 0, Matrix(1,0), 0, 0, Matrix(2,0), 0, 0,  Matrix(3,0), 0, 0,
+        0, Matrix(0,1), 0, 0,  Matrix(1,1), 0, 0,  Matrix(2,1), 0, 0, Matrix(3,1), 0,
+        0, 0, Matrix(0,2), 0, 0,  Matrix(1,2), 0,0, Matrix(2,2), 0, 0, Matrix(3,2),
+        Matrix(0,1), Matrix(0,2), 0, Matrix(1,1), Matrix(1,0), 0, Matrix(2,1), Matrix(2,0), 0, Matrix(3,1), Matrix(3,0), 0,
+        0,  Matrix(0,2), Matrix(0,1), 0, Matrix(1,2),  Matrix(1,1), 0,  Matrix(2,2), Matrix(2,1), 0,Matrix(3,2), Matrix(3,1),
+         Matrix(0,2), 0, Matrix(0,0),  Matrix(1,2), 0, Matrix(1,0), Matrix(2,2), 0, Matrix(2,0),  Matrix(3,2), 0, Matrix(3,0)
     };
     MatrixXf MatrixB;
     ConvertArrayToEigenMatrix(ArrayB, 6, 12, MatrixB);
 
     return MatrixB;
 }
+Matrix<float, 3, 3> UFEMCalculateComponent::Jacobian(Matrix<float, 3, 4> PositionMatrix)
+{
+    Matrix<float, 3, 3> Result;
+    Result.setZero();
+    Result(0, 0) = PositionMatrix(0, 1) - PositionMatrix(0, 0);
+    Result(0, 1) = PositionMatrix(0, 2) - PositionMatrix(0, 0);
+    Result(0, 2) = PositionMatrix(0, 3) - PositionMatrix(0, 0);
+    Result(1, 0) = PositionMatrix(1, 1) - PositionMatrix(1, 0);
+    Result(1, 1) = PositionMatrix(1, 2) - PositionMatrix(1, 0);
+    Result(1, 2) = PositionMatrix(1, 3) - PositionMatrix(1, 0);
+    Result(2, 0) = PositionMatrix(2, 1) - PositionMatrix(2, 0);
+    Result(2, 1) = PositionMatrix(2, 2) - PositionMatrix(2, 0);
+    Result(2, 2) = PositionMatrix(2, 3) - PositionMatrix(2, 0);
+
+    return Result / 100;
+}
+
 Matrix<float, 6, 6> UFEMCalculateComponent::EMatrix()
 {
     const TArray64<float> ArrayE =
@@ -348,8 +390,10 @@ Matrix<float, 6, 6> UFEMCalculateComponent::EMatrix()
 
     return MatrixE;
 }
-float UFEMCalculateComponent::GetTetVolume(FIntVector4 Tetra)
+float UFEMCalculateComponent::GetTetVolume(Matrix<float, 3, 3> Jaco)
 {
+    return Jaco.determinant() / 6;
+    /*
     FMatrix44f Dm;
     // 4개의 버텍스 인덱스 가져오기
     TArray<int32> VertexIndex;
@@ -387,18 +431,22 @@ float UFEMCalculateComponent::GetTetVolume(FIntVector4 Tetra)
     float Vloume = X21 * (Y23 * Z34 - Y34 * Z23) + X32 * (Y34 * Z12 - Y12 * Z34) + X43 * (Y12 * Z23 - Y23 * Z12);
 
     return Vloume / 6;
+    */
+    
 }
 
 void UFEMCalculateComponent::ConvertArrayToEigenMatrix(const TArray64<float>& InArray, const int32 InRows, const int32 InColumns, Eigen::MatrixXf& OutMatrix)
 {
+    // Resize the output matrix to match the input dimensions
     OutMatrix.resize(InRows, InColumns);
-    // Copy matrix data
-    for (int32 ColumnIndex = 0; ColumnIndex < InColumns; ++ColumnIndex)
+
+    // Copy matrix data from InArray to Eigen matrix
+    for (int32 RowIndex = 0; RowIndex < InRows; ++RowIndex)
     {
-        const int64 ColumnOffset = int64(ColumnIndex) * InRows;
-        for (int32 RowIndex = 0; RowIndex < InRows; ++RowIndex)
+        for (int32 ColumnIndex = 0; ColumnIndex < InColumns; ++ColumnIndex)
         {
-            OutMatrix(RowIndex, ColumnIndex) = InArray[ColumnOffset + RowIndex];
+            // InArray is a 1D array, so access the correct element for the (RowIndex, ColumnIndex)
+            OutMatrix(RowIndex, ColumnIndex) = InArray[ColumnIndex * InRows + RowIndex];
         }
     }
 }
