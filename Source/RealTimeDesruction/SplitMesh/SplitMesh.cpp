@@ -6,7 +6,7 @@ SplitMesh::SplitMesh(const UStaticMesh* Mesh, const UTetMeshGenerateComponent* T
 	const FStaticMeshLODResources& LODResources = Mesh->GetRenderData()->LODResources[0];
 	SplitMesh::PositionVertexBuffer = &LODResources.VertexBuffers.PositionVertexBuffer;
 	SplitMesh::IndexBuffer = &LODResources.IndexBuffer;
-	NumVertices = LODResources.GetNumVertices();
+	NumVertices = TetMesh->TetMeshVertices.Num();
 	this->Tets = &(TetMesh->Tets);
 }
 
@@ -36,6 +36,7 @@ TMap<uint32, TArray<FIntVector4>> SplitMesh::SplitTetra(const FIntVector4& tetra
 {
 	TMap<uint32, TArray<FIntVector4>> Result;
 	TMap<uint32, TArray<uint32>> Sources;
+	TMap<uint32, FVector> Pos;
 
 	for (int i = 0; i < 4; ++i)
 	{
@@ -44,9 +45,7 @@ TMap<uint32, TArray<FIntVector4>> SplitMesh::SplitTetra(const FIntVector4& tetra
 
 	if (Sources.Num() == 1)
 	{
-		// Result.Emplace(Sources.begin().Key(), tetra);
-		// Source가 1이라면 경계가 아님
-		// 경계의 사면체만 추가하여 메쉬 최소화
+		//Result.Emplace(Sources.begin().Key(), TArray({ tetra }));
 	}
 	else if (Sources.Num() == 2)
 	{
@@ -220,9 +219,22 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 {
 	TMap<uint32, UProceduralMeshComponent*> Meshes;
 	TMap<uint32, TArray<FIntVector4>> TetMeshes;
-	TMap<uint32, uint32> Idx;
 	TMap<uint32, TArray<FVector>> Vertices;
 	TMap<uint32, TArray<int32>> Triangles;
+
+	TMap<uint32, uint32> link;
+	for (int32 i = 0; i < (int32)PositionVertexBuffer->GetNumVertices(); ++i)
+	{
+		FVector3f pos = PositionVertexBuffer->VertexPosition(i);
+		for (int32 j = 0; j < TetMesh->TetMeshVertices.Num(); ++j)
+		{
+			if ((TetMesh->TetMeshVertices[j] - (FVector)pos).IsNearlyZero())
+			{
+				link.Emplace(i, j);
+				break;
+			}
+		}
+	}
 
 	// 기존 버텍스 추가
 	for (int32 i = 0; i < IndexBuffer->GetNumIndices(); i += 3)
@@ -234,16 +246,18 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 			int32 idx = (int32)IndexBuffer->GetIndex(i + j);
 			FVector vtx = FVector(PositionVertexBuffer->VertexPosition(idx));
 
-			Index.Emplace(idx);
-			Vertices.FindOrAdd(Distance->FindRef(idx).Source).Emplace(vtx);
+			Index.Emplace(link.FindRef(idx));
+			Vertices.FindOrAdd(Distance->FindRef(link.FindRef(idx)).Source).Emplace(vtx);
 		}
 
 		if (Distance->FindRef(Index[0]).Source == Distance->FindRef(Index[1]).Source &&
 			Distance->FindRef(Index[1]).Source == Distance->FindRef(Index[2]).Source)
 		{
 			Triangles.FindOrAdd(Distance->FindRef(Index[0]).Source).Append(Index);
+			UE_LOG(LogTemp, Log, TEXT("%d: [%d, %d, %d]"), Distance->FindRef(Index[0]).Source, Index[0], Index[1], Index[2]);
 		}
 	}
+	UE_LOG(LogTemp, Log, TEXT("%d Vertices."), Vertices.Num());
 
 	// 사면체 분리 후 시드별 저장
 	for (int i = 0; i < Tets->Num(); ++i)
@@ -258,7 +272,7 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 	// 새로운 메쉬 선언
 	for (int i = 0; i < Seed.Num(); ++i)
 	{
-		Meshes.FindOrAdd(Seed[i]) = NewObject<UProceduralMeshComponent>();
+		Meshes.FindOrAdd(Seed.Array()[i]) = NewObject<UProceduralMeshComponent>();
 	}
 
 	for (auto& tet : TetMeshes)
@@ -266,6 +280,12 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 		uint32 MeshKey = tet.Key;
 		auto& VertexArray = Vertices.FindOrAdd(MeshKey);
 		auto& TriangleArray = Triangles.FindOrAdd(MeshKey);
+		TArray<TSet<int32>> TriangleDupCheck;
+		for (int32 i = 0; i < TriangleArray.Num(); i += 3)
+		{
+			TriangleDupCheck.Emplace(TSet({TriangleArray[i], TriangleArray[i + 1], TriangleArray[i + 2]}));
+		}
+
 
 		for (auto& t : tet.Value)
 		{
@@ -278,25 +298,22 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 			for (int i = 0; i < 4; ++i)
 			{
 				FVector VertexPos;
-				if ((uint32)t[i] < PositionVertexBuffer->GetNumVertices())
+				if (t[i] < TetMesh->TetMeshVertices.Num())
 				{
-					VertexPos = FVector(PositionVertexBuffer->VertexPosition(t[i]));
+					VertexPos = FVector(TetMesh->TetMeshVertices[t[i]]);
 				}
 				else
 				{
-					VertexPos = FVector(VerticesToAdd[t[i] - PositionVertexBuffer->GetNumVertices()]);
+					VertexPos = FVector(VerticesToAdd[t[i] - TetMesh->TetMeshVertices.Num()]);
 				}
 
 				int32 VertexIndex;
-				if (VertexArray.Contains(VertexPos))
+				if (!VertexArray.Contains(VertexPos))
 				{
-					VertexIndex = VertexArray.Find(VertexPos);
+					VertexArray.Emplace(VertexPos);
 				}
-				else
-				{
-					VertexIndex = VertexArray.Emplace(VertexPos);
-				}
-
+				VertexIndex = VertexArray.IndexOfByKey(VertexPos);
+				
 				PosIndices.Add(VertexIndex);
 				Pos.Emplace(VertexPos);
 				Center += FVector3d(VertexPos);
@@ -310,22 +327,47 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 
 				auto isFacing = FVector::DotProduct(normal, Center - Pos[i]);
 				
-				if (FMath::IsNearlyZero(normal.Size()))
+				if (normal.IsNearlyZero())
 				{
 					continue;
 				}
 
-				if (isFacing > 0)
+				TArray<int32> Indices;
+
+				if (isFacing < 0)
 				{
-					TriangleArray.Add(PosIndices[i]);
-					TriangleArray.Add(PosIndices[(i + 2) % 4]);
-					TriangleArray.Add(PosIndices[(i + 1) % 4]);
+					Indices = { PosIndices[i], PosIndices[(i + 2) % 4], PosIndices[(i + 1) % 4] };
 				}
 				else
 				{
-					TriangleArray.Add(PosIndices[i]);
-					TriangleArray.Add(PosIndices[(i + 1) % 4]);
-					TriangleArray.Add(PosIndices[(i + 2) % 4]);
+					Indices = { PosIndices[i], PosIndices[(i + 1) % 4], PosIndices[(i + 2) % 4] };
+				}
+
+				TSet<int32> keySet = TSet(Indices);
+				int32 idx = INDEX_NONE;
+
+
+				for (int j = 0; j < TriangleDupCheck.Num(); ++j)
+				{
+					if (!TriangleDupCheck[j].Difference(keySet).Num())
+					{
+						idx = j;
+						break;
+					}
+				}
+
+				if (idx == INDEX_NONE)
+				{
+					TriangleArray.Append(Indices);
+					TriangleDupCheck.Emplace(keySet);
+				}
+				else
+				{
+					for (int j = 2; j >= 0; --j)
+					{
+						TriangleArray.RemoveAt(3 * idx + j);
+					}
+					TriangleDupCheck.RemoveAt(idx);
 				}
 			}
 		}
@@ -342,21 +384,30 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 	//}
 
 	//UE_LOG(LogTemp, Log, TEXT("VerticesToAdd: [%s]"), *VerticesLog);
-	//if (Seed.Num() == 0)
-	//{
-	//	UE_LOG(LogTemp, Error, TEXT("Seed count is zero."));
-	//}
+	if (Seed.Num() == 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Seed count is zero."));
+	}
 
+	FString ArrayString;
+
+	// 배열 요소를 문자열로 변환하여 연결
+	for (int32 Element : Seed)
+	{
+		ArrayString += FString::Printf(TEXT("%d "), Element);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Seed: %s"), *ArrayString);
 	// 새 메쉬 추가
 	for (int idx = 0; idx < Seed.Num(); ++idx)
 	{
-		uint32 Index = Seed[idx];
+		uint32 Index = Seed.Array()[idx];
 		if (Vertices.Contains(Index) && Triangles.Contains(Index))
 		{
 			Meshes[Index]->CreateMeshSection(
 				0,
-				Vertices[Index],
-				Triangles[Index],
+				Vertices.FindRef(Index),
+				Triangles.FindRef(Index),
 				TArray<FVector>(),
 				TArray<FVector2D>(),
 				TArray<FColor>(),

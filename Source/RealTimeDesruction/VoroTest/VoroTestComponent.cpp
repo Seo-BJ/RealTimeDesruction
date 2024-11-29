@@ -111,9 +111,19 @@ void UVoroTestComponent::VisualizeVertices()
 void UVoroTestComponent::DestroyActor(const UTetMeshGenerateComponent* TetComponent, const TMap<uint32, DistOutEntry>* Dist)
 {
 	UStaticMeshComponent* MeshComponent = GetOwner()->FindComponentByClass<UStaticMeshComponent>();
+	if (!MeshComponent)
+	{
+		UE_LOG(LogTemp, Error, TEXT("MeshComponent not found on the owner."));
+		return;
+	}
+
 	TMap<uint32, UProceduralMeshComponent*> Meshes;
-	
 	const UStaticMesh* Mesh = MeshComponent->GetStaticMesh();
+	if (!Mesh)
+	{
+		UE_LOG(LogTemp, Error, TEXT("StaticMesh is not assigned to MeshComponent."));
+		return;
+	}
 
 	auto MeshSplit = SplitMesh(Mesh, TetComponent, Dist);
 	Meshes = MeshSplit.Split();
@@ -134,80 +144,32 @@ void UVoroTestComponent::DestroyActor(const UTetMeshGenerateComponent* TetCompon
 		UE_LOG(LogTemp, Error, TEXT("Mesh to generate is not exist."));
 		return;
 	}
-	UE_LOG(LogTemp, Log, TEXT("Mesh Count: %d"), Meshes.Num());
+
+	TArray<UMaterialInterface*> Materials;
+	for (int32 MaterialIndex = 0; MaterialIndex < MeshComponent->GetNumMaterials(); ++MaterialIndex)
+	{
+		UMaterialInterface* Material = MeshComponent->GetMaterial(MaterialIndex);
+		if (Material)
+		{
+			Materials.Add(Material);
+		}
+	}
 	
 	for (int32 i = 0; i < Meshes.Num(); ++i)
 	{
 		FVector SpawnLocation = GetOwner()->GetActorTransform().TransformPosition((FVector)PositionBuffer.VertexPosition(key[i]));
 		FRotator SpawnRotation = GetOwner()->GetActorRotation();
-		
+
 		FActorSpawnParameters SpawnParams;
-		//SpawnParams.Owner = GetOwner(); // 이 컴포넌트를 가진 액터를 소환한 액터의 소유자로 설정
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-		AStaticMeshActor* NewActor = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), SpawnLocation, SpawnRotation, SpawnParams);
-		UE_LOG(LogTemp, Error, TEXT("New Actor Created."));
-		if (NewActor)
-		{
-			UStaticMesh* StaticMesh = NewObject<UStaticMesh>(NewActor);
-			if (!StaticMesh)
-			{
-				UE_LOG(LogTemp, Error, TEXT("StaticMesh is null."));
-				continue;
-			}
-
-			FMeshDescription MeshDescription;
-			FStaticMeshAttributes Attributes(MeshDescription);
-			Attributes.Register();
-
-			for (int32 SectionIndex = 0; SectionIndex < Meshes[key[i]]->GetNumSections(); ++SectionIndex)
-			{
-
-				auto* MeshSection = Meshes[key[i]]->GetProcMeshSection(SectionIndex);
-				if (MeshSection)
-				{
-					TArray<FProcMeshVertex> Vertices = MeshSection->ProcVertexBuffer;
-					auto& Triangles = MeshSection->ProcIndexBuffer;
-
-					TMap<int32, FVertexID> VertexMap;
-					for (int32 VertexIndex = 0; VertexIndex < Vertices.Num(); ++VertexIndex)
-					{
-						FVertexID VertexID = MeshDescription.CreateVertex();
-						Attributes.GetVertexPositions()[VertexID] = (FVector3f)Vertices[VertexIndex].Position;
-						VertexMap.Add(VertexIndex, VertexID);
-					}
-
-					FPolygonGroupID PolygonGroupID = MeshDescription.CreatePolygonGroup();
-					for (int32 TriangleIndex = 0; TriangleIndex < Triangles.Num(); TriangleIndex += 3)
-					{
-						TArray<FVertexInstanceID> VertexInstanceIDs;
-						for (int32 j = 0; j < 3; ++j)
-						{
-							FVertexInstanceID VertexInstanceID = MeshDescription.CreateVertexInstance(VertexMap[Triangles[TriangleIndex + j]]);
-							VertexInstanceIDs.Add(VertexInstanceID);
-						}
-
-						MeshDescription.CreatePolygon(PolygonGroupID, VertexInstanceIDs);
-					}
-				}
-			}
-
-			StaticMesh->BuildFromMeshDescriptions({ &MeshDescription });
-			UStaticMeshComponent* NewMeshComponent = NewActor->GetStaticMeshComponent();
-			if (NewMeshComponent)
-			{
-				NewMeshComponent->SetStaticMesh(StaticMesh);
-			}
-			else
-			{
-				UE_LOG(LogTemp, Error, TEXT("Failed to get StaticMeshComponent from spawned actor."));
-				continue;
-			}
-			
-		}
-		else
+		ASplitActor* NewActor = World->SpawnActor<ASplitActor>(ASplitActor::StaticClass(), SpawnLocation, SpawnRotation, SpawnParams);
+		if (!NewActor)
 		{
 			UE_LOG(LogTemp, Error, TEXT("Failed to spawn actor at location: %s"), *SpawnLocation.ToString());
+			continue;
 		}
+
+		NewActor->SetProceduralMesh(Meshes.FindRef(key[i]), MeshComponent->GetMaterials());
 	}
 }

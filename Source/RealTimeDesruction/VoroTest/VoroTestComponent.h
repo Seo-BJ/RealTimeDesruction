@@ -8,6 +8,7 @@
 #include "../CVT/CVT.h"
 #include "../DistanceCalculate/DistanceCalculate.h"
 #include "../SplitMesh/SplitMesh.h"
+#include "../SplitActor/SplitActor.h"
 #include "Engine/StaticMeshActor.h"
 #include "ProceduralMeshConversion.h"
 #include "StaticMeshDescription.h"

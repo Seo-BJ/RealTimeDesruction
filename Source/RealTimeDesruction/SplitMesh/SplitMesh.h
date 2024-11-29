@@ -24,5 +24,5 @@ private:
 	const TArray<FIntVector4>* Tets;
 	uint32 NumVertices;
 	TArray<FVector3f> VerticesToAdd;
-	TArray<uint32> Seed;
+	TSet<uint32> Seed;
 };
