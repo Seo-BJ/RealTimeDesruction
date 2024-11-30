@@ -136,10 +136,10 @@ void UVoroTestComponent::DestroyActor(const UTetMeshGenerateComponent* TetCompon
 	}
 
 	TArray<uint32> key;
-	Meshes.GenerateKeyArray(key);
+	Meshes.GetKeys(key);
 	auto& PositionBuffer = Mesh->GetRenderData()->LODResources[0].VertexBuffers.PositionVertexBuffer;
 
-	if (Meshes.Num() == 0)
+	if (key.Num() == 0)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Mesh to generate is not exist."));
 		return;
@@ -155,9 +155,9 @@ void UVoroTestComponent::DestroyActor(const UTetMeshGenerateComponent* TetCompon
 		}
 	}
 	
-	for (int32 i = 0; i < Meshes.Num(); ++i)
+	for (int32 i = 0; i < key.Num(); ++i)
 	{
-		FVector SpawnLocation = GetOwner()->GetActorTransform().TransformPosition((FVector)PositionBuffer.VertexPosition(key[i]));
+		FVector SpawnLocation = GetOwner()->GetActorLocation();
 		FRotator SpawnRotation = GetOwner()->GetActorRotation();
 
 		FActorSpawnParameters SpawnParams;
@@ -172,4 +172,6 @@ void UVoroTestComponent::DestroyActor(const UTetMeshGenerateComponent* TetCompon
 
 		NewActor->SetProceduralMesh(Meshes.FindRef(key[i]), MeshComponent->GetMaterials());
 	}
+
+	GetOwner()->Destroy(true);
 }

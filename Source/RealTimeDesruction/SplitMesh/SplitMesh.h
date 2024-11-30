@@ -16,6 +16,8 @@ public:
 	TMap<uint32, UProceduralMeshComponent*> Split();
 
 private:
+	void GenerateCombinations(const TArray<int32>& InputArray, TArray<int32>& CurrentCombination, int32 StartIndex, int32 CombinationSize, TArray<TArray<int32>>& Result);
+
 	const UStaticMesh* Mesh;
 	const UTetMeshGenerateComponent* TetMesh;
 	const FPositionVertexBuffer* PositionVertexBuffer;
