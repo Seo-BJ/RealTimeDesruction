@@ -3,7 +3,7 @@
 #include "TestActor_CVT.h"
 
 // For Voronoi Cells
-static TMap<int32, FColor> ColorMap = {
+TMap<int32, FColor> ColorMap = {
     {0, FColor::Red},
     {1, FColor::Green},
     {2, FColor::Blue},
@@ -69,7 +69,7 @@ TArray<uint32> ATestActor_CVT::getRandomVoronoiSites(const TArray<FVector>& Vert
 
     while (SelectedIndices.Num() < SiteNum)
     {
-        // ·£´ý ÀÎµ¦½º »ý¼º
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½Îµï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         uint32 RandomIndex = FMath::RandRange(0, Vertices.Num() - 1);
         SelectedIndices.Add(RandomIndex);
     }

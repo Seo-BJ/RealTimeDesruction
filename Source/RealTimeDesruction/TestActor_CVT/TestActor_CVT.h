@@ -41,9 +41,9 @@ private:
 
 	void ExecuteCVT();
 
-	// Å¸ÀÌ¸Ó ÇÚµé
+	// Å¸ï¿½Ì¸ï¿½ ï¿½Úµï¿½
 	FTimerHandle TimerHandle;
 
-	// nÃÊ Áö¿¬ ½Ã°£
+	// nï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½
 	float DelayTime = 5.0f;
 };

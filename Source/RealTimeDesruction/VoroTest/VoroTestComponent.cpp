@@ -21,7 +21,6 @@ UVoroTestComponent::UVoroTestComponent()
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = true;
-
 	// ...
 }
 
@@ -63,21 +62,8 @@ void UVoroTestComponent::BeginPlay()
 		for (const TPair<uint32,DistOutEntry> &dist : DistanceMap)
 			Region[dist.Key] = Sites.Find(dist.Value.Source);
 
-		//VisualizeVertices();
-
-		UStaticMeshComponent* MeshComponent = GetOwner()->FindComponentByClass<UStaticMeshComponent>();
-		SplitMesh Spliter = SplitMesh(MeshComponent->GetStaticMesh(), &DistanceMap);
-		Spliter.SetConvertedVertices(&TetMeshComponent->PolyVertexPositionInTet, &TetMeshComponent->PolyVertexIndexInTet);
-		Spliter.SetSeed(Sites);
-		Spliter.SetTetVertices(&(TetMeshComponent->TetMeshVertices));
-		Splited_Meshes = Spliter.Split(TetMeshComponent->Tets);
-
-		for (const auto Mesh : Splited_Meshes)
-		{
-			ASplitedActor* NewActor = GetWorld()->SpawnActor<ASplitedActor>(ASplitedActor::StaticClass(), FVector(1340, 970, 200), FRotator::ZeroRotator);
-			NewActor->SetProceduralMesh(Mesh, MeshComponent->GetMaterial(0));
-			//UE_LOG(LogTemp, Display, TEXT("CHECK POINT"));
-		}
+		VisualizeVertices();
+		DestroyActor(TetMeshComponent, &DistanceMap);
 	}
 }
 
@@ -96,7 +82,7 @@ TArray<uint32> UVoroTestComponent::getRandomVoronoiSites(const int32 VeticesSize
 
 	while (SelectedIndices.Num() < SiteNum)
 	{
-		// ·£´ý ÀÎµ¦½º »ý¼º
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½Îµï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		uint32 RandomIndex = FMath::RandRange(0, VeticesSize - 1);
 		SelectedIndices.Emplace(RandomIndex);
 	}
@@ -120,4 +106,72 @@ void UVoroTestComponent::VisualizeVertices()
 		else
 			DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, ColorMap[RegionOfVertex % ColorMap.Num()], true, -1.0f, 0);
 	}
+}
+
+void UVoroTestComponent::DestroyActor(const UTetMeshGenerateComponent* TetComponent, const TMap<uint32, DistOutEntry>* Dist)
+{
+	UStaticMeshComponent* MeshComponent = GetOwner()->FindComponentByClass<UStaticMeshComponent>();
+	if (!MeshComponent)
+	{
+		UE_LOG(LogTemp, Error, TEXT("MeshComponent not found on the owner."));
+		return;
+	}
+
+	TMap<uint32, UProceduralMeshComponent*> Meshes;
+	const UStaticMesh* Mesh = MeshComponent->GetStaticMesh();
+	if (!Mesh)
+	{
+		UE_LOG(LogTemp, Error, TEXT("StaticMesh is not assigned to MeshComponent."));
+		return;
+	}
+
+	auto MeshSplit = SplitMesh(Mesh, TetComponent, Dist);
+	Meshes = MeshSplit.Split();
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		UE_LOG(LogTemp, Error, TEXT("World is not valid! Cannot spawn actors."));
+		return;
+	}
+
+	TArray<uint32> key;
+	Meshes.GetKeys(key);
+	auto& PositionBuffer = Mesh->GetRenderData()->LODResources[0].VertexBuffers.PositionVertexBuffer;
+
+	if (key.Num() == 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Mesh to generate is not exist."));
+		return;
+	}
+
+	TArray<UMaterialInterface*> Materials;
+	for (int32 MaterialIndex = 0; MaterialIndex < MeshComponent->GetNumMaterials(); ++MaterialIndex)
+	{
+		UMaterialInterface* Material = MeshComponent->GetMaterial(MaterialIndex);
+		if (Material)
+		{
+			Materials.Add(Material);
+		}
+	}
+	
+	for (int32 i = 0; i < key.Num(); ++i)
+	{
+		FVector SpawnLocation = GetOwner()->GetActorLocation();
+		FRotator SpawnRotation = GetOwner()->GetActorRotation();
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+		ASplitActor* NewActor = World->SpawnActor<ASplitActor>(ASplitActor::StaticClass(), SpawnLocation, SpawnRotation, SpawnParams);
+		if (!NewActor)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Failed to spawn actor at location: %s"), *SpawnLocation.ToString());
+			continue;
+		}
+
+		NewActor->SetProceduralMesh(Meshes.FindRef(key[i]), MeshComponent->GetMaterials());
+	}
+
+	GetOwner()->Destroy(true);
 }

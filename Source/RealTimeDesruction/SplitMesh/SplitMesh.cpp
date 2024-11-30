@@ -1,65 +1,51 @@
 
 #include "SplitMesh.h"
 
-SplitMesh::SplitMesh(const UStaticMesh* Mesh, const TMap<uint32, DistOutEntry>* Distance) : Mesh(Mesh), Distance(Distance)
+SplitMesh::SplitMesh(const UStaticMesh* Mesh, const UTetMeshGenerateComponent* TetMesh, const TMap<uint32, DistOutEntry>* Distance) : Mesh(Mesh), TetMesh(TetMesh), Distance(Distance)
 {
 	const FStaticMeshLODResources& LODResources = Mesh->GetRenderData()->LODResources[0];
 	SplitMesh::PositionVertexBuffer = &LODResources.VertexBuffers.PositionVertexBuffer;
 	SplitMesh::IndexBuffer = &LODResources.IndexBuffer;
-	NumVertices = LODResources.GetNumVertices();
+	NumVertices = TetMesh->TetMeshVertices.Num();
+	this->Tets = &(TetMesh->Tets);
 }
 
-void SplitMesh::SetSeed(const TArray<uint32> Site)
-{
-	for (const uint32 s : Site)
-		Seed.Emplace(s);
-}
-
-void SplitMesh::SetTetVertices(const TArray<FVector>* TVertices)
-{
-	TetVertices = TVertices;
-	NumVertices = TVertices->Num();
-}
-
-void SplitMesh::SetConvertedVertices(const TArray<uint32>* Position, const TArray<uint32>* Index)
-{
-	PolyVertexPositionInTet = Position;
-	PolyVertexIndexInTet = Index;
-}
-
-// ±◊∑°«¡ ∞≈∏Æ ±‚π› ªÁ∏È√º ∫–∏Æ ¿ßƒ° ∞ËªÍ
+// Í±∞Î¶¨ Í∏∞Î∞ò ÏÇ¨Î©¥Ï≤¥ Î∂ÑÎ¶¨ ÏúÑÏπò Í≥ÑÏÇ∞
 FVector3f SplitMesh::CalculateSplitPoint(const int32& p1, const int32& p2)
 {
-	FVector Point1 = (*TetVertices)[p1];
-	FVector Point2 = (*TetVertices)[p2];
-	double Dist = (Point1 - Point2).Size();
-	double Weight = (((Distance->FindRef(p1).Weight + Distance->FindRef(p2).Weight + Dist) / 2) - Distance->FindRef(p2).Weight) / Dist;
-	return FVector3f(Point1 + ((Point2 - Point1) * (1 - Weight)));
+	FVector3f Point1 = (FVector3f)TetMesh->TetMeshVertices[p1];
+	FVector3f Point2 = (FVector3f)TetMesh->TetMeshVertices[p2];
+	double Dist = FVector3f::Dist(Point1, Point2);
+	double D1 = FVector3f::Dist(Point1, (FVector3f)TetMesh->TetMeshVertices[Distance->FindRef(p1).Source]);
+	double D2 = FVector3f::Dist(Point2, (FVector3f)TetMesh->TetMeshVertices[Distance->FindRef(p1).Source]);
+	double Weight = (((D1 + D2 + Dist) / 2) - D2) / Dist;
+	auto Result = Point1 + ((Point2 - Point1) * (1 - Weight));
+	//UE_LOG(LogTemp, Log, TEXT("Point1: (%f, %f, %f), Point2: (%f, %f, %f), Dist: %f, D1: %f, D2: %f, Weight: %f, Split Point: (%f, %f, %f)"),
+	//	Point1.X, Point1.Y, Point1.Z,
+	//	Point2.X, Point2.Y, Point2.Z,
+	//	Dist,
+	//	D1,
+	//	D2,
+	//	Weight,
+	//	Result.X, Result.Y, Result.Z);
+	return Result;
 }
 
-// πˆ≈ÿΩ∫∞° æÓ¥¿ Seedø° º”«œ¥¬¡ˆø° µ˚∏• ªÁ∏È√º ∫–∏Æ
-TMap<uint32, FIntVector4> SplitMesh::SplitTetra(const FIntVector4& tetra)
+// Î≤ÑÌÖçÏä§Í∞Ä Ïñ¥Îäê SeedÏóê ÏÜçÌïòÎäîÏßÄÏóê Îî∞Î•∏ ÏÇ¨Î©¥Ï≤¥ Î∂ÑÎ¶¨
+TMap<uint32, TArray<FIntVector4>> SplitMesh::SplitTetra(const FIntVector4& tetra)
 {
-	TMap<uint32, FIntVector4> Result;
+	TMap<uint32, TArray<FIntVector4>> Result;
 	TMap<uint32, TArray<uint32>> Sources;
+	TMap<uint32, FVector> Pos;
 
-	for (uint32 i = 0; i < 4; ++i)
+	for (int i = 0; i < 4; ++i)
 	{
-		if (Sources.Contains(Distance->FindRef(tetra[i]).Source))
-			Sources[Distance->FindRef(tetra[i]).Source].Emplace(tetra[i]);
-		else
-		{
-			TArray<uint32> Arr = TArray<uint32>();
-			Arr.Emplace(tetra[i]);
-			Sources.Emplace(Distance->FindRef(tetra[i]).Source, Arr);
-		}
+		Sources.FindOrAdd(Distance->FindRef(tetra[i]).Source).Emplace((uint32)tetra[i]);
 	}
 
 	if (Sources.Num() == 1)
 	{
-		// Result.Emplace(Sources.begin().Key(), tetra);
-		// Source∞° 1¿Ã∂Û∏È ∞Ê∞Ë∞° æ∆¥‘
-		// ∞Ê∞Ë¿« ªÁ∏È√º∏∏ √ﬂ∞°«œø© ∏ﬁΩ¨ √÷º“»≠
+		Result.Emplace(Sources.begin().Key(), TArray({ tetra }));
 	}
 	else if (Sources.Num() == 2)
 	{
@@ -84,12 +70,12 @@ TMap<uint32, FIntVector4> SplitMesh::SplitTetra(const FIntVector4& tetra)
 			VerticesToAdd.Emplace(M12);
 			VerticesToAdd.Emplace(M13);
 
-			Result.Emplace(Source1.Key(), FIntVector4(t[0], t[1], NewIndexM02, NewIndexM03));
-			Result.Emplace(Source1.Key(), FIntVector4(t[1], NewIndexM02, NewIndexM03, NewIndexM13));
-			Result.Emplace(Source1.Key(), FIntVector4(t[1], NewIndexM02, NewIndexM13, NewIndexM12));
-			Result.Emplace(Source2.Key(), FIntVector4(NewIndexM12, NewIndexM02, NewIndexM03, t[2]));
-			Result.Emplace(Source2.Key(), FIntVector4(NewIndexM12, NewIndexM03, NewIndexM13, t[2]));
-			Result.Emplace(Source2.Key(), FIntVector4(t[2], t[3], NewIndexM03, NewIndexM13));
+			Result.FindOrAdd(Source1.Key()).Emplace(FIntVector4(t[0], t[1], NewIndexM02, NewIndexM03));
+			Result.FindOrAdd(Source1.Key()).Emplace(FIntVector4(t[1], NewIndexM02, NewIndexM03, NewIndexM13));
+			Result.FindOrAdd(Source1.Key()).Emplace(FIntVector4(t[1], NewIndexM02, NewIndexM13, NewIndexM12));
+			Result.FindOrAdd(Source2.Key()).Emplace(FIntVector4(NewIndexM12, NewIndexM02, NewIndexM13, t[2]));
+			Result.FindOrAdd(Source2.Key()).Emplace(FIntVector4(NewIndexM03, NewIndexM02, NewIndexM13, t[2]));
+			Result.FindOrAdd(Source2.Key()).Emplace(FIntVector4(t[2], t[3], NewIndexM03, NewIndexM13));
 		}
 		else
 		{
@@ -121,10 +107,10 @@ TMap<uint32, FIntVector4> SplitMesh::SplitTetra(const FIntVector4& tetra)
 			VerticesToAdd.Emplace(M02);
 			VerticesToAdd.Emplace(M03);
 
-			Result.Emplace(key1, FIntVector4(t[0], NewIndexM01, NewIndexM02, NewIndexM03));
-			Result.Emplace(key2, FIntVector4(NewIndexM01, t[1], t[2], t[3]));
-			Result.Emplace(key2, FIntVector4(NewIndexM02, NewIndexM01, t[2], t[3]));
-			Result.Emplace(key2, FIntVector4(NewIndexM03, NewIndexM01, NewIndexM02, t[3]));
+			Result.FindOrAdd(key1).Emplace(FIntVector4(t[0], NewIndexM01, NewIndexM02, NewIndexM03));
+			Result.FindOrAdd(key2).Emplace(FIntVector4(NewIndexM01, t[1], t[2], t[3]));
+			Result.FindOrAdd(key2).Emplace(FIntVector4(NewIndexM02, NewIndexM01, t[2], t[3]));
+			Result.FindOrAdd(key2).Emplace(FIntVector4(NewIndexM03, NewIndexM01, NewIndexM02, t[3]));
 		}
 
 	}
@@ -176,13 +162,13 @@ TMap<uint32, FIntVector4> SplitMesh::SplitTetra(const FIntVector4& tetra)
 		VerticesToAdd.Emplace(M12);
 		VerticesToAdd.Emplace(M13);
 
-		Result.Emplace(key1, FIntVector4(t[0], NewIndexM01, NewIndexM02, NewIndexM03));
-		Result.Emplace(key1, FIntVector4(NewIndexM02, NewIndexM03, NewIndexM01, NewIndexM13));
-		Result.Emplace(key2, FIntVector4(t[1], NewIndexM12, NewIndexM13, NewIndexM01));
-		Result.Emplace(key2, FIntVector4(NewIndexM12, NewIndexM13, NewIndexM01, NewIndexM02));
-		Result.Emplace(key3, FIntVector4(NewIndexM12, t[2], NewIndexM13, NewIndexM02));
-		Result.Emplace(key3, FIntVector4(t[2], t[3], NewIndexM13, NewIndexM02));
-		Result.Emplace(key3, FIntVector4(NewIndexM13, t[3], NewIndexM03, NewIndexM02));
+		Result.FindOrAdd(key1).Emplace(FIntVector4(t[0], NewIndexM01, NewIndexM02, NewIndexM03));
+		Result.FindOrAdd(key1).Emplace(FIntVector4(NewIndexM02, NewIndexM03, NewIndexM01, NewIndexM13));
+		Result.FindOrAdd(key2).Emplace(FIntVector4(t[1], NewIndexM12, NewIndexM13, NewIndexM01));
+		Result.FindOrAdd(key2).Emplace(FIntVector4(NewIndexM12, NewIndexM13, NewIndexM01, NewIndexM02));
+		Result.FindOrAdd(key3).Emplace(FIntVector4(NewIndexM12, t[2], NewIndexM13, NewIndexM02));
+		Result.FindOrAdd(key3).Emplace(FIntVector4(t[2], t[3], NewIndexM13, NewIndexM02));
+		Result.FindOrAdd(key3).Emplace(FIntVector4(NewIndexM13, t[3], NewIndexM03, NewIndexM02));
 	}
 	else
 	{
@@ -212,177 +198,264 @@ TMap<uint32, FIntVector4> SplitMesh::SplitTetra(const FIntVector4& tetra)
 		VerticesToAdd.Emplace(M13);
 		VerticesToAdd.Emplace(M23);
 
-		Result.Emplace(Source1.Key(), FIntVector4(tetra[0], NewIndexM01, NewIndexM02, NewIndexM03));
-		Result.Emplace(Source1.Key(), FIntVector4(NewIndexM02, NewIndexM03, NewIndexM01, NewIndexM13));
-		Result.Emplace(Source2.Key(), FIntVector4(tetra[1], NewIndexM12, NewIndexM13, NewIndexM01));
-		Result.Emplace(Source2.Key(), FIntVector4(NewIndexM12, NewIndexM13, NewIndexM02, NewIndexM23));
-		Result.Emplace(Source3.Key(), FIntVector4(tetra[2], NewIndexM23, NewIndexM12, NewIndexM02));
-		Result.Emplace(Source4.Key(), FIntVector4(tetra[3], NewIndexM13, NewIndexM23, NewIndexM03));
-		Result.Emplace(Source4.Key(), FIntVector4(NewIndexM13, NewIndexM23, NewIndexM03, NewIndexM02));
+		Result.FindOrAdd(Source1.Key()).Emplace(FIntVector4(tetra[0], NewIndexM01, NewIndexM02, NewIndexM03));
+		Result.FindOrAdd(Source1.Key()).Emplace(FIntVector4(NewIndexM02, NewIndexM03, NewIndexM01, NewIndexM13));
+		Result.FindOrAdd(Source2.Key()).Emplace(FIntVector4(tetra[1], NewIndexM12, NewIndexM13, NewIndexM01));
+		Result.FindOrAdd(Source2.Key()).Emplace(FIntVector4(NewIndexM12, NewIndexM13, NewIndexM02, NewIndexM01));
+		Result.FindOrAdd(Source3.Key()).Emplace(FIntVector4(tetra[2], NewIndexM23, NewIndexM12, NewIndexM02));
+		Result.FindOrAdd(Source3.Key()).Emplace(FIntVector4(NewIndexM23, NewIndexM13, NewIndexM02, NewIndexM12));
+		Result.FindOrAdd(Source4.Key()).Emplace(FIntVector4(tetra[3], NewIndexM13, NewIndexM23, NewIndexM03));
+		Result.FindOrAdd(Source4.Key()).Emplace(FIntVector4(NewIndexM13, NewIndexM23, NewIndexM03, NewIndexM02));
 	}
 
-	//Sources.GetKeys(Seed);
+	TArray<uint32> s;
+	Sources.GenerateKeyArray(s);
+	Seed.Append(s);
+
 	return Result;
 }
 
-// ªÁ∏È√ºø°º≠ ∏ﬁΩ¨∏¶ ∫–∏Æ«œ∞Ì ªı ∏ﬁΩ¨ π›»Ø
-TArray<UProceduralMeshComponent*> SplitMesh::Split(const TArray<FIntVector4>& Tets)
+void SplitMesh::GenerateCombinations(const TArray<int32>& InputArray, TArray<int32>& CurrentCombination, int32 StartIndex, int32 CombinationSize, TArray<TArray<int32>>& Result) {
+	if (CurrentCombination.Num() == CombinationSize) {
+		Result.Add(CurrentCombination);
+		return;
+	}
+
+	for (int32 i = StartIndex; i < InputArray.Num(); i++) {
+		CurrentCombination.Add(InputArray[i]);
+		GenerateCombinations(InputArray, CurrentCombination, i + 1, CombinationSize, Result);
+		CurrentCombination.Pop();
+	}
+}
+
+// ÏÇ¨Î©¥Ï≤¥ÏóêÏÑú Î©îÏâ¨Î•º Î∂ÑÎ¶¨ÌïòÍ≥† ÏÉà Î©îÏâ¨ Î∞òÌôò
+TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 {
-	TArray<UProceduralMeshComponent*> Meshes;
-
-	// ∞¢ ∫∏∑Œ≥Î¿Ã ºøø° º”«— ªÁ∏È√º
-	TMap<uint32, TArray<FIntVector4>> TetMesh;
-
-	std::mutex m;
-	TMap<uint32, uint32> Idx;
-
-	// ∞¢ ∫∏∑Œ≥Î¿Ã ºøø° º”«— πˆ≈ÿΩ∫øÕ ªÔ∞¢«¸µÈ
+	TMap<uint32, UProceduralMeshComponent*> Meshes;
+	TMap<uint32, TArray<FIntVector4>> TetMeshes;
 	TMap<uint32, TArray<FVector>> Vertices;
 	TMap<uint32, TArray<int32>> Triangles;
+	TMap<uint32, TArray<TSet<int32>>> TriangleDupCheck;
 
-	// ªı∑ŒøÓ ∏ﬁΩ¨ º±æ
-	for (int i = 0; i < Seed.Num(); ++i)
+	TMap<uint32, uint32> link;
+	for (int32 i = 0; i < (int32)PositionVertexBuffer->GetNumVertices(); ++i)
 	{
-		Meshes.Emplace(NewObject<UProceduralMeshComponent>());
-		Idx.Emplace(Seed.Array()[i], i);
+		FVector3f pos = PositionVertexBuffer->VertexPosition(i);
+		for (int32 j = 0; j < TetMesh->TetMeshVertices.Num(); ++j)
+		{
+			if ((TetMesh->TetMeshVertices[j] - (FVector)pos).IsNearlyZero())
+			{
+				link.Emplace(i, j);
+				break;
+			}
+		}
 	}
-	
-	// ±‚¡∏ πˆ≈ÿΩ∫ √ﬂ∞°
+
+	// Í∏∞Ï°¥ Î≤ÑÌÖçÏä§ Ï∂îÍ∞Ä
 	for (int32 i = 0; i < IndexBuffer->GetNumIndices(); i += 3)
 	{
 		TArray<int32> Index;
 
-		// ªÔ∞¢«¸¿« ¿Œµ¶Ω∫∏¶ πﬁæ∆º≠ Distance ∏ ø°º≠ ±◊ ¿Œµ¶Ω∫∑Œ ¡¢±Ÿ«ÿº≠ Verticesø° ¿˙¿Â
 		for (int j = 0; j < 3; ++j)
 		{
-			//int32 idx = (int32)IndexBuffer->GetIndex(i + j);
-			int32 idx = (*PolyVertexIndexInTet)[i + j];
-			FVector vtx = (*TetVertices)[idx];
+			int32 idx = (int32)IndexBuffer->GetIndex(i + j);
+			FVector vtx = FVector(PositionVertexBuffer->VertexPosition(idx));
 
-			Index.Emplace(idx);
-
-			if (Vertices.Contains(Distance->FindRef(idx).Source))
-				Vertices[Distance->FindRef(idx).Source].Emplace(vtx);
-			else
-			{
-				TArray<FVector> Arr = TArray<FVector>();
-				Arr.Emplace(vtx);
-				Vertices.Emplace(Distance->FindRef(idx).Source, Arr);
-			}
+			Index.Emplace(link.FindRef(idx));
+			Vertices.FindOrAdd(Distance->FindRef(link.FindRef(idx)).Source).Emplace(vtx);
 		}
 
-		//UE_LOG(LogTemp, Display, TEXT("CHECK POINT1 : %d"), Distance->FindRef(Index[0]).Source);
-		//UE_LOG(LogTemp, Display, TEXT("CHECK POINT2 : %d"), Distance->FindRef(Index[1]).Source);
-		//UE_LOG(LogTemp, Display, TEXT("CHECK POINT3 : %d"), Distance->FindRef(Index[2]).Source);
-
-		bool flag_same_tri1 = Distance->FindRef(Index[0]).Source == Distance->FindRef(Index[1]).Source;
-		bool flag_same_tri2 = Distance->FindRef(Index[1]).Source == Distance->FindRef(Index[2]).Source;
-
-		// ∏∏æ‡ ªÔ∞¢«¸¿Ã µø¿œ«— ∫∏∑Œ≥Î¿Ã ºøø° ¿÷¥Ÿ∏È triø° √ﬂ∞°
-		if (flag_same_tri1 && flag_same_tri2)
+		if (Distance->FindRef(Index[0]).Source == Distance->FindRef(Index[1]).Source &&
+			Distance->FindRef(Index[1]).Source == Distance->FindRef(Index[2]).Source)
 		{
-			Triangles.Emplace(Distance->FindRef(Index[0]).Source, Index);
+			Triangles.FindOrAdd(Distance->FindRef(Index[0]).Source).Append(Index);
+			UE_LOG(LogTemp, Log, TEXT("%d: [%d, %d, %d]"), Distance->FindRef(Index[0]).Source, Index[0], Index[1], Index[2]);
 		}
 	}
 
-	// ªÁ∏È√º ∫–∏Æ »ƒ Ω√µÂ∫∞ ¿˙¿Â
-	//ParallelFor(Tets.Num(), [&](uint32 i)
-	for(uint32 i = 0; i < (uint32)Tets.Num(); i++)
-		{
-			auto result = SplitTetra(Tets[i]);
-			for (auto& r : result)
-			{
-				std::unique_lock<std::mutex> lock(m);
-				TetMesh.FindRef(r.Key).Emplace(r.Value);
-			}
-			//});
-		}
-	
-	for (auto& tet : TetMesh)
+	// ÏÇ¨Î©¥Ï≤¥ Î∂ÑÎ¶¨ ÌõÑ ÏãúÎìúÎ≥Ñ Ï†ÄÏû•
+	for (int i = 0; i < Tets->Num(); ++i)
 	{
-		uint32 MeshKey = tet.Key;
-		auto& VertexArray = Vertices[MeshKey];
-		auto& TriangleArray = Triangles[MeshKey];
-
-		for (auto& t : tet.Value)
+		auto result = SplitTetra((*Tets)[i]);
+		for (auto& r : result)
 		{
-			FVector3d Center = FVector3d(0.0, 0.0, 0.0);
-			TArray<int32> PosIndices;
-			TArray<FVector3d> Pos;
-
-			// ø‹¿˚¿ª ¿ÃøÎ«— ªÔ∞¢«¸ ¿Œµ¶Ω∫ ∞·¡§
-			// ªÔ∞¢«¸¿« ø‹¿˚¿Ã ªÁ∏È√º¿« ¡ﬂΩ…¿ª «‚«—¥Ÿ∏È æ»¬ ¿ª ∫∏∞Ì ¿÷¥¬ ∞Õ¿Ãπ«∑Œ π›¥Î πÊ«‚¿∏∑Œ »∏¿¸
-			for (int i = 0; i < 4; ++i)
-			{
-				FVector VertexPos;
-				if (PolyVertexPositionInTet->Contains((uint32)t[i]))
-				{
-					VertexPos = (*TetVertices)[t[i]];
-				}
-				else
-				{
-					VertexPos = FVector(VerticesToAdd[t[i] - PositionVertexBuffer->GetNumVertices()]);
-				}
-
-				int32 VertexIndex;
-				if (VertexArray.Contains(VertexPos))
-				{
-					VertexIndex = VertexArray.Find(VertexPos);
-				}
-				else
-				{
-					VertexIndex = VertexArray.Emplace(VertexPos);
-				}
-
-				PosIndices.Add(VertexIndex);
-				Pos.Emplace(VertexPos);
-				Center += FVector3d(VertexPos);
-			}
-
-			Center /= 4;
-
-			for (int i = 0; i < 4; ++i)
-			{
-				auto normal = FVector::CrossProduct(Pos[(i + 1) % 4] - Pos[i], Pos[(i + 2) % 4] - Pos[i]);
-
-				auto isFacing = FVector::DotProduct(normal, Center - Pos[i]);
-
-				if (isFacing > 0)
-				{
-					TriangleArray.Add(PosIndices[i]);
-					TriangleArray.Add(PosIndices[(i + 2) % 4]);
-					TriangleArray.Add(PosIndices[(i + 1) % 4]);
-				}
-				else
-				{
-					TriangleArray.Add(PosIndices[i]);
-					TriangleArray.Add(PosIndices[(i + 1) % 4]);
-					TriangleArray.Add(PosIndices[(i + 2) % 4]);
-				}
-			}
+			TetMeshes.FindOrAdd(r.Key).Append(r.Value);
 		}
 	}
-	
 
+	auto SeedArray = Seed.Array();
+	SeedArray.Sort();
 
-	// ªı ∏ﬁΩ¨ √ﬂ∞°
-	for (auto& MeshKey : Idx)
+	// ÏÉàÎ°úÏö¥ Î©îÏâ¨ ÏÑ†Ïñ∏
+	for (int i = 0; i < SeedArray.Num(); ++i)
 	{
-		uint32 Index = MeshKey.Value;
-		if (Vertices.Contains(MeshKey.Key) && Triangles.Contains(MeshKey.Key))
+		Meshes.FindOrAdd(SeedArray[i]) = NewObject<UProceduralMeshComponent>();
+	}
+
+
+	for (int32 i = 0; i < SeedArray.Num(); ++i)
+	{
+		for (int32 j = 0; j < Triangles.FindRef(SeedArray[i]).Num(); j += 3)
+		{
+			TriangleDupCheck.FindOrAdd(SeedArray[i]).Emplace(TSet({ Triangles.FindRef(SeedArray[i])[j], Triangles.FindRef(SeedArray[i])[j + 1], Triangles.FindRef(SeedArray[i])[j + 2] }));
+		}
+		Vertices.FindOrAdd(SeedArray[i]);
+		TriangleDupCheck.FindOrAdd(SeedArray[i]);
+		Triangles.FindOrAdd(SeedArray[i]);
+	}
+
+	TArray<int32> arr({ 0, 1, 2, 3 });
+	TArray<TArray<int32>> AllCombinations;
+	TArray<int32> CurrentCombination;
+	GenerateCombinations(arr, CurrentCombination, 0, 3, AllCombinations);
+
+	FGraphEventRef Task = FFunctionGraphTask::CreateAndDispatchWhenReady([&]()
+		{
+			ParallelFor(SeedArray.Num(), [&](int32 Index)
+				{
+					uint32 MeshKey = SeedArray[Index];
+					TArray<FIntVector4>& TetValue = TetMeshes[MeshKey];
+
+					TArray<FVector>& VertexArray = Vertices.FindOrAdd(MeshKey);
+					TArray<int32>& TriangleArray = Triangles.FindOrAdd(MeshKey);
+					TArray<TSet<int32>>& TriangleDup = TriangleDupCheck.FindOrAdd(MeshKey);
+
+					for (auto& t : TetValue)
+					{
+						FVector3d Center = FVector3d(0.0, 0.0, 0.0);
+						TArray<int32> PosIndices;
+						TArray<FVector3d> Pos;
+
+						for (int i = 0; i < 4; ++i)
+						{
+							FVector VertexPos;
+							if (t[i] < TetMesh->TetMeshVertices.Num())
+							{
+								VertexPos = FVector(TetMesh->TetMeshVertices[t[i]]);
+							}
+							else
+							{
+								VertexPos = FVector(VerticesToAdd[t[i] - TetMesh->TetMeshVertices.Num()]);
+							}
+
+							int32 VertexIndex;
+							if (!VertexArray.Contains(VertexPos))
+							{
+								VertexArray.Emplace(VertexPos);
+							}
+							VertexIndex = VertexArray.IndexOfByKey(VertexPos);
+
+							PosIndices.Add(VertexIndex);
+							Pos.Emplace(VertexPos);
+							Center += FVector3d(VertexPos);
+						}
+
+						Center /= 4;
+
+						for (auto& Comb : AllCombinations)
+						{
+							auto normal = FVector::CrossProduct(Pos[Comb[1]] - Pos[Comb[0]], Pos[Comb[2]] - Pos[Comb[0]]);
+							auto isFacing = FVector::DotProduct(normal, Center - Pos[Comb[0]]);
+						
+							if (normal.IsNearlyZero())
+							{
+								continue;
+							}
+
+							TArray<int32> Indices;
+
+							if (isFacing > 0)
+							{
+								Indices = { PosIndices[Comb[0]], PosIndices[Comb[1]], PosIndices[Comb[2]] };
+							}
+							else
+							{
+								Indices = { PosIndices[Comb[2]], PosIndices[Comb[1]], PosIndices[Comb[0]] };
+							}
+
+							TSet<int32> keySet(Indices);
+							int32 idx = INDEX_NONE;
+
+							for (int32 i = 0; i < TriangleDup.Num(); ++i)
+							{
+								if (!(TriangleDup[i].Difference(keySet).Num()))
+								{
+									idx = i;
+									break;
+								}
+							}
+
+							if (idx == INDEX_NONE)
+							{
+								TriangleArray.Append(Indices);
+								TriangleDup.Emplace(keySet);
+							}
+							else
+							{
+								for (int i = 2; i >= 0; --i)
+								{
+									TriangleArray.RemoveAt(3 * idx + i);
+								}
+								TriangleDup.RemoveAt(idx);
+							}
+						}
+					}
+				}
+			);
+		}
+	);
+
+	FTaskGraphInterface::Get().WaitUntilTaskCompletes(Task);
+
+	//FString VerticesLog;
+	//for (const FVector3f& Vertex : VerticesToAdd)
+	//{
+	//	VerticesLog += FString::Printf(TEXT("(%f, %f, %f), "), Vertex.X, Vertex.Y, Vertex.Z);
+	//}
+
+	//if (VerticesLog.Len() > 2)
+	//{
+	//	VerticesLog.LeftChopInline(2);
+	//}
+
+	//UE_LOG(LogTemp, Log, TEXT("VerticesToAdd: [%s]"), *VerticesLog);
+
+
+	if (SeedArray.Num() == 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Seed count is zero."));
+	}
+
+	FString ArrayString;
+
+	// Î∞∞Ïó¥ ÏöîÏÜåÎ•º Î¨∏ÏûêÏó¥Î°ú Î≥ÄÌôòÌïòÏó¨ Ïó∞Í≤∞
+	for (int32 Element : SeedArray)
+	{
+		ArrayString += FString::Printf(TEXT("%d "), Element);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Seed: %s"), *ArrayString);
+	// ÏÉà Î©îÏâ¨ Ï∂îÍ∞Ä
+	for (int idx = 0; idx < SeedArray.Num(); ++idx)
+	{
+		uint32 Index = SeedArray[idx];
+		if (Vertices.Contains(Index) && Triangles.Contains(Index) && Meshes.Contains(Index))
 		{
 			Meshes[Index]->CreateMeshSection(
 				0,
-				Vertices[MeshKey.Key],
-				Triangles[MeshKey.Key],
+				Vertices.FindRef(Index),
+				Triangles.FindRef(Index),
 				TArray<FVector>(),
 				TArray<FVector2D>(),
 				TArray<FColor>(),
 				TArray<FProcMeshTangent>(),
-				true 
+				true
 			);
-			UE_LOG(LogTemp, Display, TEXT("CHECK POINT1 : %d"), Vertices[MeshKey.Key].Num());
-			UE_LOG(LogTemp, Display, TEXT("CHECK POINT2 : %d"), Triangles[MeshKey.Key].Num());
+			UE_LOG(LogTemp, Log, TEXT("Vertex %d, Triangle %d"), Vertices.FindRef(Index).Num(), Triangles.FindRef(Index).Num());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("Vertex Init Error."));
 		}
 	}
 
