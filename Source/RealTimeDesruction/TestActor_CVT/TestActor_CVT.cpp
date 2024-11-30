@@ -3,7 +3,7 @@
 #include "TestActor_CVT.h"
 
 // For Voronoi Cells
-TMap<int32, FColor> ColorMap = {
+TMap<int32, FColor> Color_Map = {
     {0, FColor::Red},
     {1, FColor::Green},
     {2, FColor::Blue},
@@ -56,7 +56,7 @@ void ATestActor_CVT::VisualizeVertices()
         if (i == CVT_inst.Sites[RegionOfVertex])
             DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, FColor::White, true, -1.0f, 0);
         else
-            DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, ColorMap[RegionOfVertex % ColorMap.Num()], true, -1.0f, 0);
+            DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, Color_Map[RegionOfVertex % Color_Map.Num()], true, -1.0f, 0);
 	}
 }
 

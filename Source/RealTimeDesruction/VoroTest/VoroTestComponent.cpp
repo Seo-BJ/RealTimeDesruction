@@ -4,7 +4,7 @@
 #include "VoroTestComponent.h"
 
 // For Voronoi Cells
-static TMap<int32, FColor> ColorMap = {
+TMap<int32, FColor> ColorMap = {
 	{0, FColor::Red},
 	{1, FColor::Green},
 	{2, FColor::Blue},
