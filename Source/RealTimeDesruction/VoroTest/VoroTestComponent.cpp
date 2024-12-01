@@ -171,6 +171,7 @@ void UVoroTestComponent::DestroyActor(const UTetMeshGenerateComponent* TetCompon
 		}
 
 		NewActor->SetProceduralMesh(Meshes.FindRef(key[i]), MeshComponent->GetMaterials());
+		NewActor->GenerateCollisionConvexMesh();
 	}
 
 	GetOwner()->Destroy(true);

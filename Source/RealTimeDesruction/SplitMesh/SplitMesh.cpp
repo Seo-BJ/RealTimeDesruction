@@ -269,7 +269,7 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 			Distance->FindRef(Index[1]).Source == Distance->FindRef(Index[2]).Source)
 		{
 			Triangles.FindOrAdd(Distance->FindRef(Index[0]).Source).Append(Index);
-			UE_LOG(LogTemp, Log, TEXT("%d: [%d, %d, %d]"), Distance->FindRef(Index[0]).Source, Index[0], Index[1], Index[2]);
+			//UE_LOG(LogTemp, Log, TEXT("%d: [%d, %d, %d]"), Distance->FindRef(Index[0]).Source, Index[0], Index[1], Index[2]);
 		}
 	}
 
@@ -451,6 +451,7 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 				TArray<FProcMeshTangent>(),
 				true
 			);
+			Meshes[Index]->AddCollisionConvexMesh(Vertices.FindRef(Index));
 			UE_LOG(LogTemp, Log, TEXT("Vertex %d, Triangle %d"), Vertices.FindRef(Index).Num(), Triangles.FindRef(Index).Num());
 		}
 		else

@@ -28,4 +28,5 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 	void SetProceduralMesh(UProceduralMeshComponent* Mesh, TArray<UMaterialInterface*> Materials);
+	void GenerateCollisionConvexMesh();
 };
