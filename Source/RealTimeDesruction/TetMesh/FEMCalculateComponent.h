@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "../WeightedGraph/WeightedGraph.h"
 #include <Eigen>
 
 #include "FEMCalculateComponent.generated.h"
@@ -66,6 +67,11 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = ())
 	bool bInvertOutputTets = false;
 
+	TArray<FVector> TetMeshVertices;
+
+	TArray<FIntVector4> Tets;
+
+	WeightedGraph Graph{ false };
 
 protected:
 
@@ -75,13 +81,11 @@ private:
 
 	void InitializeTetMesh();
 
+	void GenerateGraphFromTets();
+
 	TArray<float> UndeformedPositions;
 
 	TArray<Matrix<float, 12, 12>> KElements;
-
-	TArray<FVector> TetMeshVertices;
-
-	TArray<FIntVector4> Tets;
 
 	// 에너지 계산
 	float CalculateEnergy(Matrix<float, 4, 4> DmMatrix, Matrix<float, 4, 4> UMatrix, float TetVolume);

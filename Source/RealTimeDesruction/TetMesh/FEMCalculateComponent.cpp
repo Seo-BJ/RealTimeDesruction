@@ -86,6 +86,8 @@ void UFEMCalculateComponent::InitializeTetMesh()
         SetUndeformedPositions();
         KMatrix();
 
+        GenerateGraphFromTets();
+
         /*
         for (int32 i = 0; i < TetMeshVertices.Num(); i++)
         {
@@ -106,6 +108,27 @@ void UFEMCalculateComponent::InitializeTetMesh()
         UE_LOG(LogTemp, Warning, TEXT("Failed to Generate tet mesh!"));
     }
 
+}
+
+void UFEMCalculateComponent::GenerateGraphFromTets()
+{
+    for (uint32 i = 0; i < (uint32)TetMeshVertices.Num(); i++)
+        Graph.addVertex(i);
+
+    for (const FIntVector4 Tet : Tets)
+    {
+        FVector Vertex_X = TetMeshVertices[Tet.X];
+        FVector Vertex_Y = TetMeshVertices[Tet.Y];
+        FVector Vertex_Z = TetMeshVertices[Tet.Z];
+        FVector Vertex_W = TetMeshVertices[Tet.W];
+
+        Graph.addLink(Tet.X, Tet.Y, Vertex_Y - Vertex_X);
+        Graph.addLink(Tet.Y, Tet.Z, Vertex_Z - Vertex_Y);
+        Graph.addLink(Tet.Z, Tet.X, Vertex_X - Vertex_Z);
+        Graph.addLink(Tet.X, Tet.W, Vertex_W - Vertex_X);
+        Graph.addLink(Tet.Y, Tet.W, Vertex_W - Vertex_Y);
+        Graph.addLink(Tet.Z, Tet.W, Vertex_W - Vertex_Z);
+    }
 }
 
 float UFEMCalculateComponent::CalculateEnergyAtTatUsingFEM(const FVector& Velocity, const FVector& NextTickVelocity, const float Mass, const FVector& HitPoint)
@@ -320,8 +343,8 @@ void UFEMCalculateComponent::KMatrix()
         }
         // 자코비안 행렬 계산
         Matrix<float, 3, 3> Jaco = Jacobian(Demention);
-        LogMatrix<Matrix<float, 3, 3>>(Jaco, "Jacobian 3 x 3");
-        UE_LOG(LogTemp, Warning, TEXT("Jaco Determinant : %f"), Jaco.determinant());
+        //LogMatrix<Matrix<float, 3, 3>>(Jaco, "Jacobian 3 x 3");
+        //UE_LOG(LogTemp, Warning, TEXT("Jaco Determinant : %f"), Jaco.determinant());
         // 형상함수 행렬 계산.
         Matrix<float, 4, 3> ShapeFunctionDiffMatrix;
         ShapeFunctionDiffMatrix.setZero();
@@ -334,7 +357,7 @@ void UFEMCalculateComponent::KMatrix()
         // 최종 형상함수를 각 x, y, z 성분에 대한 미분 행렬 계산.
         Matrix<float, 4, 3> Result = ShapeFunctionDiffMatrix * Jaco.inverse();
         float Volume = GetTetVolume(Jaco);
-        UE_LOG(LogTemp, Warning, TEXT("Volume : %f"), Volume);
+        //UE_LOG(LogTemp, Warning, TEXT("Volume : %f"), Volume);
         Matrix<float, 6, 12> MatrixB = BMatrix(Result)/ (Volume);
         Matrix<float, 6, 6> MatrixE = EMatrix();
 

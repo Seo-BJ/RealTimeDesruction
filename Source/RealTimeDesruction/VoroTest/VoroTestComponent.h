@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "../TetMesh/TetMeshGenerateComponent.h"
+#include "../TetMesh/FEMCalculateComponent.h"
 #include "../CVT/CVT.h"
 #include "../DistanceCalculate/DistanceCalculate.h"
 #include "../SplitMesh/SplitMesh.h"
@@ -40,11 +40,11 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
-	UTetMeshGenerateComponent* TetMeshComponent = nullptr;
+	UFEMCalculateComponent* FEMComponent = nullptr;
 	TArray<uint32> Sites;
 	TArray<uint32> Region;
 
 	TArray<uint32> getRandomVoronoiSites(const int32 VeticesSize);
 	void VisualizeVertices();
-	void DestroyActor(const UTetMeshGenerateComponent* TetComponent, const TMap<uint32, DistOutEntry>* Dist);
+	void DestroyActor(const TMap<uint32, DistOutEntry>* Dist);
 };

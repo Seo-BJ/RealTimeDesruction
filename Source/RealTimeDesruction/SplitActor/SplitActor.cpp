@@ -60,10 +60,6 @@ void ASplitActor::GenerateCollisionConvexMesh()
 		TArray<FVector> ConvexVerts;
 		for (const FProcMeshVertex& Vertex : ProceduralMesh->GetProcMeshSection(0)->ProcVertexBuffer)
 		{
-			UE_LOG(LogTemp, Display, TEXT("Z=%f  Y=%f  Z=%f"),
-				Vertex.Position.X,
-				Vertex.Position.Y,
-				Vertex.Position.Z);
 			ConvexVerts.Add(Vertex.Position);
 		}
 		ProceduralMesh->AddCollisionConvexMesh(ConvexVerts);

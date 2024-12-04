@@ -29,23 +29,28 @@ UVoroTestComponent::UVoroTestComponent()
 void UVoroTestComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	
 
 	// ...
-	TetMeshComponent = GetOwner()->FindComponentByClass<UTetMeshGenerateComponent>();
+	FEMComponent = GetOwner()->FindComponentByClass<UFEMCalculateComponent>();
 
-	if (TetMeshComponent != nullptr)
+	if (FEMComponent != nullptr)
 	{
 		GetOwner()->FindComponentByClass<UStaticMeshComponent>()->SetVisibility(bMeshVisibility);
 
-		TetMeshComponent->Graph;
+		FEMComponent->Graph;
 
-		Sites = getRandomVoronoiSites(TetMeshComponent->TetMeshVertices.Num());
+		UE_LOG(LogTemp, Display, TEXT("!! Vertex : %d"), FEMComponent->TetMeshVertices.Num());
+		UE_LOG(LogTemp, Display, TEXT("!! Tets : %d"), FEMComponent->Tets.Num());
+
+		
+		Sites = getRandomVoronoiSites(FEMComponent->TetMeshVertices.Num());
 
 		if (bUseCVT)
 		{
 			CVT CVT_inst;
 
-			CVT_inst.SetVertices(TetMeshComponent->TetMeshVertices);
+			CVT_inst.SetVertices(FEMComponent->TetMeshVertices);
 			CVT_inst.SetVoronoiSites(Sites);
 			CVT_inst.Lloyd_Algo();
 			Sites = CVT_inst.Sites;
@@ -53,17 +58,17 @@ void UVoroTestComponent::BeginPlay()
 		}
 
 		Region.Empty();
-		Region.AddUninitialized(TetMeshComponent->TetMeshVertices.Num());
+		Region.AddUninitialized(FEMComponent->TetMeshVertices.Num());
 
 		DistanceCalculate DistCalc;
 		TMap<uint32, DistOutEntry> DistanceMap;
-		DistanceMap = DistCalc.Calculate(TetMeshComponent->Graph, Sites, 3);
+		DistanceMap = DistCalc.Calculate(FEMComponent->Graph, Sites, 3);
 
 		for (const TPair<uint32,DistOutEntry> &dist : DistanceMap)
 			Region[dist.Key] = Sites.Find(dist.Value.Source);
 
-		VisualizeVertices();
-		DestroyActor(TetMeshComponent, &DistanceMap);
+		//VisualizeVertices();
+		DestroyActor(&DistanceMap);
 	}
 }
 
@@ -94,9 +99,9 @@ TArray<uint32> UVoroTestComponent::getRandomVoronoiSites(const int32 VeticesSize
 
 void UVoroTestComponent::VisualizeVertices()
 {
-	for (int32 i = 0; i < TetMeshComponent->TetMeshVertices.Num(); i++)
+	for (int32 i = 0; i < FEMComponent->TetMeshVertices.Num(); i++)
 	{
-		FVector WorldPosition = GetOwner()->GetActorTransform().TransformPosition(static_cast<FVector>(TetMeshComponent->TetMeshVertices[i]));
+		FVector WorldPosition = GetOwner()->GetActorTransform().TransformPosition(static_cast<FVector>(FEMComponent->TetMeshVertices[i]));
 		int32 RegionOfVertex = Region[i];
 
 		//DrawDebugString(GetWorld(), WorldPosition + FVector(0, 0, 20), FString::Printf(TEXT("%d"), i));
@@ -108,7 +113,7 @@ void UVoroTestComponent::VisualizeVertices()
 	}
 }
 
-void UVoroTestComponent::DestroyActor(const UTetMeshGenerateComponent* TetComponent, const TMap<uint32, DistOutEntry>* Dist)
+void UVoroTestComponent::DestroyActor(const TMap<uint32, DistOutEntry>* Dist)
 {
 	UStaticMeshComponent* MeshComponent = GetOwner()->FindComponentByClass<UStaticMeshComponent>();
 	if (!MeshComponent)
@@ -125,7 +130,7 @@ void UVoroTestComponent::DestroyActor(const UTetMeshGenerateComponent* TetCompon
 		return;
 	}
 
-	auto MeshSplit = SplitMesh(Mesh, TetComponent, Dist);
+	auto MeshSplit = SplitMesh(Mesh, FEMComponent, Dist);
 	Meshes = MeshSplit.Split();
 
 	UWorld* World = GetWorld();

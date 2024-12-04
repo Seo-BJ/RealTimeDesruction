@@ -1,23 +1,23 @@
 
 #include "SplitMesh.h"
 
-SplitMesh::SplitMesh(const UStaticMesh* Mesh, const UTetMeshGenerateComponent* TetMesh, const TMap<uint32, DistOutEntry>* Distance) : Mesh(Mesh), TetMesh(TetMesh), Distance(Distance)
+SplitMesh::SplitMesh(const UStaticMesh* Mesh, const UFEMCalculateComponent* FEMComponent, const TMap<uint32, DistOutEntry>* Distance) : Mesh(Mesh), FEMComponent(FEMComponent), Distance(Distance)
 {
 	const FStaticMeshLODResources& LODResources = Mesh->GetRenderData()->LODResources[0];
 	SplitMesh::PositionVertexBuffer = &LODResources.VertexBuffers.PositionVertexBuffer;
 	SplitMesh::IndexBuffer = &LODResources.IndexBuffer;
-	NumVertices = TetMesh->TetMeshVertices.Num();
-	this->Tets = &(TetMesh->Tets);
+	NumVertices = FEMComponent->TetMeshVertices.Num();
+	this->Tets = &(FEMComponent->Tets);
 }
 
 // 거리 기반 사면체 분리 위치 계산
 FVector3f SplitMesh::CalculateSplitPoint(const int32& p1, const int32& p2)
 {
-	FVector3f Point1 = (FVector3f)TetMesh->TetMeshVertices[p1];
-	FVector3f Point2 = (FVector3f)TetMesh->TetMeshVertices[p2];
+	FVector3f Point1 = (FVector3f)FEMComponent->TetMeshVertices[p1];
+	FVector3f Point2 = (FVector3f)FEMComponent->TetMeshVertices[p2];
 	double Dist = FVector3f::Dist(Point1, Point2);
-	double D1 = FVector3f::Dist(Point1, (FVector3f)TetMesh->TetMeshVertices[Distance->FindRef(p1).Source]);
-	double D2 = FVector3f::Dist(Point2, (FVector3f)TetMesh->TetMeshVertices[Distance->FindRef(p1).Source]);
+	double D1 = FVector3f::Dist(Point1, (FVector3f)FEMComponent->TetMeshVertices[Distance->FindRef(p1).Source]);
+	double D2 = FVector3f::Dist(Point2, (FVector3f)FEMComponent->TetMeshVertices[Distance->FindRef(p1).Source]);
 	double Weight = (((D1 + D2 + Dist) / 2) - D2) / Dist;
 	auto Result = Point1 + ((Point2 - Point1) * (1 - Weight));
 	//UE_LOG(LogTemp, Log, TEXT("Point1: (%f, %f, %f), Point2: (%f, %f, %f), Dist: %f, D1: %f, D2: %f, Weight: %f, Split Point: (%f, %f, %f)"),
@@ -241,9 +241,9 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 	for (int32 i = 0; i < (int32)PositionVertexBuffer->GetNumVertices(); ++i)
 	{
 		FVector3f pos = PositionVertexBuffer->VertexPosition(i);
-		for (int32 j = 0; j < TetMesh->TetMeshVertices.Num(); ++j)
+		for (int32 j = 0; j < FEMComponent->TetMeshVertices.Num(); ++j)
 		{
-			if ((TetMesh->TetMeshVertices[j] - (FVector)pos).IsNearlyZero())
+			if ((FEMComponent->TetMeshVertices[j] - (FVector)pos).IsNearlyZero())
 			{
 				link.Emplace(i, j);
 				break;
@@ -329,13 +329,13 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 						for (int i = 0; i < 4; ++i)
 						{
 							FVector VertexPos;
-							if (t[i] < TetMesh->TetMeshVertices.Num())
+							if (t[i] < FEMComponent->TetMeshVertices.Num())
 							{
-								VertexPos = FVector(TetMesh->TetMeshVertices[t[i]]);
+								VertexPos = FVector(FEMComponent->TetMeshVertices[t[i]]);
 							}
 							else
 							{
-								VertexPos = FVector(VerticesToAdd[t[i] - TetMesh->TetMeshVertices.Num()]);
+								VertexPos = FVector(VerticesToAdd[t[i] - FEMComponent->TetMeshVertices.Num()]);
 							}
 
 							int32 VertexIndex;
