@@ -362,105 +362,103 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 
 	Futures.Empty();
 
-	for (int32 Index = 0; Index < SeedArray.Num(); ++Index)
-	{
-		Futures.Add(Async(EAsyncExecution::ThreadPool, [&, Index]()
-			{
-				uint32 MeshKey = SeedArray[Index];
-				TArray<FIntVector4>& TetValue = TetMeshes[MeshKey];
-
-				TArray<FVector>& VertexArray = Vertices.FindOrAdd(MeshKey);
-				TArray<int32>& TriangleArray = Triangles.FindOrAdd(MeshKey);
-				TArray<TSet<int32>>& TriangleDup = TriangleDupCheck.FindOrAdd(MeshKey);
-
-				for (auto& t : TetValue)
+	FGraphEventRef Task = FFunctionGraphTask::CreateAndDispatchWhenReady([&]()
+		{
+			ParallelFor(SeedArray.Num(), [&](int32 Index)
 				{
-					FVector3d Center = FVector3d(0.0, 0.0, 0.0);
-					TArray<int32> PosIndices;
-					TArray<FVector3d> Pos;
+					uint32 MeshKey = SeedArray[Index];
+					TArray<FIntVector4>& TetValue = TetMeshes[MeshKey];
 
-					for (int i = 0; i < 4; ++i)
+					TArray<FVector>& VertexArray = Vertices.FindOrAdd(MeshKey);
+					TArray<int32>& TriangleArray = Triangles.FindOrAdd(MeshKey);
+					TArray<TSet<int32>>& TriangleDup = TriangleDupCheck.FindOrAdd(MeshKey);
+
+					for (auto& t : TetValue)
 					{
-						FVector VertexPos;
-						if (t[i] < FEMComponent->TetMeshVertices.Num())
+						FVector3d Center = FVector3d(0.0, 0.0, 0.0);
+						TArray<int32> PosIndices;
+						TArray<FVector3d> Pos;
+
+						for (int i = 0; i < 4; ++i)
 						{
-							VertexPos = FVector(FEMComponent->TetMeshVertices[t[i]]);
-						}
-						else
-						{
-							VertexPos = FVector(VerticesToAdd[t[i] - FEMComponent->TetMeshVertices.Num()]);
-						}
-
-						int32 VertexIndex;
-						if (!VertexArray.Contains(VertexPos))
-						{
-							VertexArray.Emplace(VertexPos);
-						}
-						VertexIndex = VertexArray.IndexOfByKey(VertexPos);
-
-						PosIndices.Add(VertexIndex);
-						Pos.Emplace(VertexPos);
-						Center += FVector3d(VertexPos);
-					}
-
-					Center /= 4;
-
-					for (auto& Comb : AllCombinations)
-					{
-						auto normal = FVector::CrossProduct(Pos[Comb[1]] - Pos[Comb[0]], Pos[Comb[2]] - Pos[Comb[0]]);
-						auto isFacing = FVector::DotProduct(normal, Center - Pos[Comb[0]]);
-
-						if (normal.IsNearlyZero())
-						{
-							continue;
-						}
-
-						TArray<int32> Indices;
-
-						if (isFacing > 0)
-						{
-							Indices = { PosIndices[Comb[0]], PosIndices[Comb[1]], PosIndices[Comb[2]] };
-						}
-						else
-						{
-							Indices = { PosIndices[Comb[2]], PosIndices[Comb[1]], PosIndices[Comb[0]] };
-						}
-
-						TSet<int32> keySet(Indices);
-						int32 idx = INDEX_NONE;
-
-						for (int32 i = 0; i < TriangleDup.Num(); ++i)
-						{
-							if (!(TriangleDup[i].Difference(keySet).Num()))
+							FVector VertexPos;
+							if (t[i] < FEMComponent->TetMeshVertices.Num())
 							{
-								idx = i;
-								break;
+								VertexPos = FVector(FEMComponent->TetMeshVertices[t[i]]);
 							}
+							else
+							{
+								VertexPos = FVector(VerticesToAdd[t[i] - FEMComponent->TetMeshVertices.Num()]);
+							}
+
+							int32 VertexIndex;
+							if (!VertexArray.Contains(VertexPos))
+							{
+								VertexArray.Emplace(VertexPos);
+							}
+							VertexIndex = VertexArray.IndexOfByKey(VertexPos);
+
+							PosIndices.Add(VertexIndex);
+							Pos.Emplace(VertexPos);
+							Center += FVector3d(VertexPos);
 						}
 
-						if (idx == INDEX_NONE)
+						Center /= 4;
+
+						for (auto& Comb : AllCombinations)
 						{
-							TriangleArray.Append(Indices);
-							TriangleDup.Emplace(keySet);
-						}
-						else
-						{
-							for (int i = 2; i >= 0; --i)
+							auto normal = FVector::CrossProduct(Pos[Comb[1]] - Pos[Comb[0]], Pos[Comb[2]] - Pos[Comb[0]]);
+							auto isFacing = FVector::DotProduct(normal, Center - Pos[Comb[0]]);
+
+							if (normal.IsNearlyZero())
 							{
-								TriangleArray.RemoveAt(3 * idx + i);
+								continue;
 							}
-							TriangleDup.RemoveAt(idx);
+
+							TArray<int32> Indices;
+
+							if (isFacing > 0)
+							{
+								Indices = { PosIndices[Comb[0]], PosIndices[Comb[1]], PosIndices[Comb[2]] };
+							}
+							else
+							{
+								Indices = { PosIndices[Comb[2]], PosIndices[Comb[1]], PosIndices[Comb[0]] };
+							}
+
+							TSet<int32> keySet(Indices);
+							int32 idx = INDEX_NONE;
+
+							for (int32 i = 0; i < TriangleDup.Num(); ++i)
+							{
+								if (!(TriangleDup[i].Difference(keySet).Num()))
+								{
+									idx = i;
+									break;
+								}
+							}
+
+							if (idx == INDEX_NONE)
+							{
+								TriangleArray.Append(Indices);
+								TriangleDup.Emplace(keySet);
+							}
+							else
+							{
+								for (int i = 2; i >= 0; --i)
+								{
+									TriangleArray.RemoveAt(3 * idx + i);
+								}
+								TriangleDup.RemoveAt(idx);
+							}
 						}
 					}
 				}
-			}
-		));
-	}
+			);
+		}
+	);
 
-	for (auto& Future : Futures)
-	{
-		Future.Wait();
-	}
+	FTaskGraphInterface::Get().WaitUntilTaskCompletes(Task);
 
 	//FString VerticesLog;
 	//for (const FVector3f& Vertex : VerticesToAdd)
