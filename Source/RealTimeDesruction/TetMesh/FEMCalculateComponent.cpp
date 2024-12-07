@@ -135,21 +135,27 @@ float UFEMCalculateComponent::CalculateEnergyAtTatUsingFEM(const FVector& Veloci
 {
     int32 ExcludedIndex = 0;
     FInt32Vector4 ClosestResult = GetClosestTriangleAndTet(HitPoint, ExcludedIndex);
-
-    // Hit했을 때 분석을 할 Tet의 인덱스와 삼각형 면 정점
     int32 TargetTetIndex = ClosestResult[0];
-    FVector A = TetMeshVertices[ClosestResult[1]];
-    FVector B = TetMeshVertices[ClosestResult[2]];
-    FVector C = TetMeshVertices[ClosestResult[3]];
+
+    CurrentImpactPoint = { 
+        (uint32)Tets[TargetTetIndex][ClosestResult[1] - 1],
+        (uint32)Tets[TargetTetIndex][ClosestResult[2] - 1],
+        (uint32)Tets[TargetTetIndex][ClosestResult[3] - 1]
+    };
+
+    // Hit했을 때 분석을 할 삼각형 면 정점
+    FVector A = TetMeshVertices[CurrentImpactPoint[0]];
+    FVector B = TetMeshVertices[CurrentImpactPoint[1]];
+    FVector C = TetMeshVertices[CurrentImpactPoint[2]];
 
     Matrix<float, 9, 1> F = CalculateImpactForceMatrix(Velocity, NextTickVelocity, Mass, HitPoint, { A, B, C });
     Matrix<float, 9, 9> K = SubKMatrix(KElements[TargetTetIndex], ExcludedIndex);
     Matrix<float, 4, 4> u = UMatrix(K, F, { ClosestResult[1], ClosestResult[2], ClosestResult[3] }, ExcludedIndex);
 
-    LogMatrix<Matrix<float, 12, 12>>(KElements[TargetTetIndex], "Origin Matrix K");
-    LogMatrix<Matrix<float, 9, 1>>(F, "F");
+    //LogMatrix<Matrix<float, 12, 12>>(KElements[TargetTetIndex], "Origin Matrix K");
+    //LogMatrix<Matrix<float, 9, 1>>(F, "F");
     //LogMatrix<Matrix<float, 9, 9>>(K, "Sub Matrix K");
-    LogMatrix<Matrix<float, 4, 4>>(u, "u");
+    //LogMatrix<Matrix<float, 4, 4>>(u, "u");
     //UE_LOG(LogTemp, Warning, TEXT("Excluded Index = %d"), ExcludedIndex);
     //UE_LOG(LogTemp, Warning, TEXT("K Determinant : %f"), K.determinant());
 
@@ -185,12 +191,12 @@ float UFEMCalculateComponent::CalculateEnergyAtTatUsingFEM(const FVector& Veloci
 float UFEMCalculateComponent::CalculateEnergy(Matrix<float, 4, 4> DmMatrix, Matrix<float, 4, 4> UMatrix, float TetVolume)
 {
     Matrix<float, 4, 4> DsMatrix = DmMatrix + UMatrix;
-    LogMatrix<Matrix<float, 4, 4>>(DmMatrix, "Dm Matrix");
-    LogMatrix<Matrix<float, 4, 4>>(UMatrix, "U Matrix");
-    LogMatrix<Matrix<float, 4, 4>>(DsMatrix, "Ds Matrix");
+    //LogMatrix<Matrix<float, 4, 4>>(DmMatrix, "Dm Matrix");
+    //LogMatrix<Matrix<float, 4, 4>>(UMatrix, "U Matrix");
+    //LogMatrix<Matrix<float, 4, 4>>(DsMatrix, "Ds Matrix");
 
     Matrix<float, 4, 4> GMatrix = DsMatrix * DmMatrix.inverse();
-    LogMatrix<Matrix<float, 4, 4>>(GMatrix, "GMatrix");
+    //LogMatrix<Matrix<float, 4, 4>>(GMatrix, "GMatrix");
 
     Matrix<float, 4, 4> Identity;
     Identity.setZero();
@@ -198,9 +204,9 @@ float UFEMCalculateComponent::CalculateEnergy(Matrix<float, 4, 4> DmMatrix, Matr
     Identity(1, 1) = 1;
     Identity(2, 2) = 1;
     Identity(3, 3) = 1;
-    LogMatrix<Matrix<float, 4, 4>>(Identity, "Identity Matrix");
+    //LogMatrix<Matrix<float, 4, 4>>(Identity, "Identity Matrix");
     Matrix<float, 4, 4> StrainTensorMatrix = (GMatrix + GMatrix.transpose()) / 2 - Identity;
-    LogMatrix<Matrix<float, 4, 4>>(StrainTensorMatrix, "Strain Tensor Matrix");
+    //LogMatrix<Matrix<float, 4, 4>>(StrainTensorMatrix, "Strain Tensor Matrix");
     float DoubleDotProduct = 0.f;
     for (int i = 0; i < 4; i++)
     {
@@ -223,8 +229,8 @@ Matrix<float, 4, 4> UFEMCalculateComponent::UMatrix(Matrix<float, 9, 9> KMatrix,
     UMatrix9x1.setZero();
     UMatrix4x4.setZero();
     UMatrix9x1 = KMatrix.inverse() * FMatrix;
-   LogMatrix<Matrix<float, 9, 1>>(UMatrix9x1, "U Matrix 9 x 1");
-   LogMatrix<Matrix<float, 9, 9>>(KMatrix.inverse(), "K Inverse");
+   //LogMatrix<Matrix<float, 9, 1>>(UMatrix9x1, "U Matrix 9 x 1");
+   //LogMatrix<Matrix<float, 9, 9>>(KMatrix.inverse(), "K Inverse");
    UE_LOG(LogTemp, Warning, TEXT("Sub K Determinant : %f"), KMatrix.determinant());
     for (int Index = 0; Index < 4; Index++)
     {
@@ -492,8 +498,9 @@ TArray<FVector3f> UFEMCalculateComponent::GetVerticesFromStaticMesh(UStaticMeshC
 
 FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTet(const FVector& HitPosition, int32& OutExcludedIndex)
 {
-    // 가장 가까운 삼각형과의 거리
-    float MinDistance = FLT_MAX;
+    // 가장 가까운 사면체, 삼각형과의 거리
+    float TetMinDistance = FLT_MAX;
+    float TriMinDistance = FLT_MAX;
     FInt32Vector4 Result = {0, 0, 0, 0};
     // 각 사면체에 대해 순차적으로 확인
     for (int i = 0; i < Tets.Num(); ++i)
@@ -506,59 +513,67 @@ FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTet(const FVector& Hi
         FVector B = TetMeshVertices[Tet.Y];
         FVector C = TetMeshVertices[Tet.Z];
         FVector D = TetMeshVertices[Tet.W];
-        
-        // 사면체는 4개의 삼각형 면을 가짐 (각 사면체의 각 면은 3개의 정점으로 구성)
-        // 1) 삼각형 ABC
-        FVector Tri1Point1 = A, Tri1Point2 = B, Tri1Point3 = C;
-        float Distance1 = DistanceToTriangle(HitPosition, Tri1Point1, Tri1Point2, Tri1Point3);
 
-        // 2) 삼각형 ABD
-        FVector Tri2Point1 = A, Tri2Point2 = B, Tri2Point3 = D;
-        float Distance2 = DistanceToTriangle(HitPosition, Tri2Point1, Tri2Point2, Tri2Point3);
-
-        // 3) 삼각형 ACD
-        FVector Tri3Point1 = A, Tri3Point2 = C, Tri3Point3 = D;
-        float Distance3 = DistanceToTriangle(HitPosition, Tri3Point1, Tri3Point2, Tri3Point3);
-
-        // 4) 삼각형 BCD
-        FVector Tri4Point1 = B, Tri4Point2 = C, Tri4Point3 = D;
-        float Distance4 = DistanceToTriangle(HitPosition, Tri4Point1, Tri4Point2, Tri4Point3);
-
-        // 가장 가까운 삼각형을 선택, 최솟값 계산
-        TArray<float> Distances = { Distance1, Distance2, Distance3, Distance4 };
-        int32 MinIndex = -1;
-        FMath::Min(Distances, &MinIndex);
-        float CurrentMinDistance = Distances[MinIndex];
-        if (CurrentMinDistance < MinDistance)
+        // 먼저 사면체 거리 측정
+        FVector Center = (A + B + C + D) / 4;
+        float CurrentTetMinDistance = FVector::Dist(Center, HitPosition);
+        if (CurrentTetMinDistance < TetMinDistance)
         {
-            Result[0] = i;
-            MinDistance = CurrentMinDistance;
-            switch (MinIndex)
+            TetMinDistance = CurrentTetMinDistance;
+
+            // 사면체는 4개의 삼각형 면을 가짐 (각 사면체의 각 면은 3개의 정점으로 구성)
+            // 1) 삼각형 ABC
+            FVector Tri1Point1 = A, Tri1Point2 = B, Tri1Point3 = C;
+            float Distance1 = DistanceToTriangle(HitPosition, Tri1Point1, Tri1Point2, Tri1Point3);
+
+            // 2) 삼각형 ABD
+            FVector Tri2Point1 = A, Tri2Point2 = B, Tri2Point3 = D;
+            float Distance2 = DistanceToTriangle(HitPosition, Tri2Point1, Tri2Point2, Tri2Point3);
+
+            // 3) 삼각형 ACD
+            FVector Tri3Point1 = A, Tri3Point2 = C, Tri3Point3 = D;
+            float Distance3 = DistanceToTriangle(HitPosition, Tri3Point1, Tri3Point2, Tri3Point3);
+
+            // 4) 삼각형 BCD
+            FVector Tri4Point1 = B, Tri4Point2 = C, Tri4Point3 = D;
+            float Distance4 = DistanceToTriangle(HitPosition, Tri4Point1, Tri4Point2, Tri4Point3);
+
+            // 가장 가까운 삼각형을 선택, 최솟값 계산
+            TArray<float> Distances = { Distance1, Distance2, Distance3, Distance4 };
+            int32 MinIndex = -1;
+            FMath::Min(Distances, &MinIndex);
+            float CurrentTriMinDistance = Distances[MinIndex];
+            if (CurrentTriMinDistance < TriMinDistance)
             {
-            case 0:
-                Result[1] = 1;
-                Result[2] = 2;
-                Result[3] = 3;
-                OutExcludedIndex = 4;
-                break;
-            case 1:
-                Result[1] = 1;
-                Result[2] = 2;
-                Result[3] = 4;
-                OutExcludedIndex = 3;
-                break;
-            case 2:
-                Result[1] = 1;
-                Result[2] = 3;
-                Result[3] = 4;
-                OutExcludedIndex = 2;
-                break;
-            case 3:
-                Result[1] = 2;
-                Result[2] = 3;
-                Result[3] = 4;
-                OutExcludedIndex = 1;
-                break;
+                Result[0] = i;
+                TriMinDistance = CurrentTriMinDistance;
+                switch (MinIndex)
+                {
+                case 0:
+                    Result[1] = 1;
+                    Result[2] = 2;
+                    Result[3] = 3;
+                    OutExcludedIndex = 4;
+                    break;
+                case 1:
+                    Result[1] = 1;
+                    Result[2] = 2;
+                    Result[3] = 4;
+                    OutExcludedIndex = 3;
+                    break;
+                case 2:
+                    Result[1] = 1;
+                    Result[2] = 3;
+                    Result[3] = 4;
+                    OutExcludedIndex = 2;
+                    break;
+                case 3:
+                    Result[1] = 2;
+                    Result[2] = 3;
+                    Result[3] = 4;
+                    OutExcludedIndex = 1;
+                    break;
+                }
             }
         }
     }

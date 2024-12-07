@@ -113,7 +113,7 @@ void UTetMeshGenerateComponent::GenerateGraphFromTets()
 		FVector Vertex_Y = UTetMeshGenerateComponent::TetMeshVertices[Tet.Y];
 		FVector Vertex_Z = UTetMeshGenerateComponent::TetMeshVertices[Tet.Z];
 		FVector Vertex_W = UTetMeshGenerateComponent::TetMeshVertices[Tet.W];
-		
+
 		Graph.addLink(Tet.X, Tet.Y, Vertex_Y - Vertex_X);
 		Graph.addLink(Tet.Y, Tet.Z, Vertex_Z - Vertex_Y);
 		Graph.addLink(Tet.Z, Tet.X, Vertex_X - Vertex_Z);

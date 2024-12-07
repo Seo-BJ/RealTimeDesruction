@@ -73,6 +73,8 @@ public:
 
 	WeightedGraph Graph{ false };
 
+	TArray<uint32> CurrentImpactPoint;
+
 protected:
 
 	virtual void BeginPlay() override;

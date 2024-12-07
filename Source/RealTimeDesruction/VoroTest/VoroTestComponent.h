@@ -28,8 +28,9 @@ public:
 	bool bUseCVT;
 	UPROPERTY(EditAnywhere, Category = "Dataflow")
 	bool bMeshVisibility;
-	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = (ClampMin = "1"))
-	int32 SiteNum = 10;
+
+	UFUNCTION(BlueprintCallable)
+	void DestructMesh(const float Energy, const int32 SeedNum, const bool RandomSeed, const bool UseCVT);
 
 protected:
 	// Called when the game starts
@@ -41,10 +42,45 @@ public:
 
 private:
 	UFEMCalculateComponent* FEMComponent = nullptr;
-	TArray<uint32> Sites;
+	TArray<uint32> Seeds;
 	TArray<uint32> Region;
 
-	TArray<uint32> getRandomVoronoiSites(const int32 VeticesSize);
+	TArray<uint32> getVoronoiSeedByRandom(const int32 SeedNum);
+	TArray<uint32> getVoronoiSeedByImpactPoint(const int32 SeedNum, const TArray<uint32> ImpactPoint);
 	void VisualizeVertices();
 	void DestroyActor(const TMap<uint32, DistOutEntry>* Dist);
+	void UpdateGraphWeight(const float Energy, const TArray<uint32> ImpactPoint);
+	
+	template <typename T>
+	TArray<uint32> getRandomElementsFromArray(const TArray<T>& InputArray, uint32 NumElements)
+	{
+		TArray<T> RandomElements;
+
+		if (NumElements >= (uint32)InputArray.Num())
+		{
+			return InputArray;
+		}
+
+		// 원본 배열의 인덱스를 섞기 위한 리스트 생성
+		TArray<int32> Indices;
+		for (int32 i = 0; i < InputArray.Num(); ++i)
+		{
+			Indices.Add(i);
+		}
+
+		// 인덱스 배열을 섞기
+		for (int32 i = Indices.Num() - 1; i > 0; --i)
+		{
+			int32 j = FMath::RandRange(0, i);
+			Indices.Swap(i, j);
+		}
+
+		// 섞인 인덱스 중에서 NumElements만큼 선택
+		for (int32 i = 0; i < (int32)NumElements; ++i)
+		{
+			RandomElements.Add(InputArray[Indices[i]]);
+		}
+
+		return RandomElements;
+	}
 };

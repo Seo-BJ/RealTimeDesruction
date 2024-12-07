@@ -29,47 +29,120 @@ UVoroTestComponent::UVoroTestComponent()
 void UVoroTestComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	
-
-	// ...
 	FEMComponent = GetOwner()->FindComponentByClass<UFEMCalculateComponent>();
+}
 
-	if (FEMComponent != nullptr)
+void UVoroTestComponent::DestructMesh(const float Energy, const int32 SeedNum, const bool RandomSeed, const bool UseCVT)
+{
+	UpdateGraphWeight(Energy, FEMComponent->CurrentImpactPoint);
+	if (RandomSeed)
+		Seeds = getVoronoiSeedByRandom(SeedNum);
+	else
+		Seeds = getVoronoiSeedByImpactPoint(SeedNum, FEMComponent->CurrentImpactPoint);
+
+	if (UseCVT)
 	{
-		GetOwner()->FindComponentByClass<UStaticMeshComponent>()->SetVisibility(bMeshVisibility);
+		CVT CVT_inst;
 
-		FEMComponent->Graph;
-
-		UE_LOG(LogTemp, Display, TEXT("!! Vertex : %d"), FEMComponent->TetMeshVertices.Num());
-		UE_LOG(LogTemp, Display, TEXT("!! Tets : %d"), FEMComponent->Tets.Num());
-
-		
-		Sites = getRandomVoronoiSites(FEMComponent->TetMeshVertices.Num());
-
-		if (bUseCVT)
-		{
-			CVT CVT_inst;
-
-			CVT_inst.SetVertices(FEMComponent->TetMeshVertices);
-			CVT_inst.SetVoronoiSites(Sites);
-			CVT_inst.Lloyd_Algo();
-			Sites = CVT_inst.Sites;
-			Region = CVT_inst.Region;
-		}
-
-		Region.Empty();
-		Region.AddUninitialized(FEMComponent->TetMeshVertices.Num());
-
-		DistanceCalculate DistCalc;
-		TMap<uint32, DistOutEntry> DistanceMap;
-		DistanceMap = DistCalc.Calculate(FEMComponent->Graph, Sites, 3);
-
-		for (const TPair<uint32,DistOutEntry> &dist : DistanceMap)
-			Region[dist.Key] = Sites.Find(dist.Value.Source);
-
-		//VisualizeVertices();
-		DestroyActor(&DistanceMap);
+		CVT_inst.SetVertices(FEMComponent->TetMeshVertices);
+		CVT_inst.SetVoronoiSites(Seeds);
+		CVT_inst.Lloyd_Algo();
+		Seeds = CVT_inst.Sites;
+		Region = CVT_inst.Region;
 	}
+
+	Region.Empty();
+	Region.AddUninitialized(FEMComponent->TetMeshVertices.Num());
+
+	DistanceCalculate DistCalc;
+	TMap<uint32, DistOutEntry> DistanceMap;
+	DistanceMap = DistCalc.Calculate(FEMComponent->Graph, Seeds, 3);
+
+	for (const TPair<uint32, DistOutEntry>& dist : DistanceMap)
+		Region[dist.Key] = Seeds.Find(dist.Value.Source);
+
+	//VisualizeVertices();
+	DestroyActor(&DistanceMap);
+}
+
+void UVoroTestComponent::UpdateGraphWeight(const float Energy, const TArray<uint32> ImpactPoint)
+{
+	WeightedGraph* Graph = &(FEMComponent->Graph);
+	TSet<uint32> VisitedVertex;
+	TSet<uint32> NextVertexLayer;
+	TMap<uint32, float> EnergyMap;
+	TMap<uint32, uint32> EnergyMap_Contributed;
+
+	const float FACTOR_DIST_DAMPING = 0.01f;
+	
+	for (uint32 i = 0; i < Graph->size(); ++i)
+	{
+		EnergyMap.Add(i, 0);
+		EnergyMap_Contributed.Add(i, 0);
+	}
+
+	NextVertexLayer.Append(ImpactPoint);
+	EnergyMap[ImpactPoint[0]] = Energy;
+	EnergyMap[ImpactPoint[1]] = Energy;
+	EnergyMap[ImpactPoint[2]] = Energy;
+
+	EnergyMap_Contributed[ImpactPoint[0]] = 1;
+	EnergyMap_Contributed[ImpactPoint[1]] = 1;
+	EnergyMap_Contributed[ImpactPoint[2]] = 1;
+
+	// Calc Vertex Energy
+	while(!NextVertexLayer.IsEmpty())
+	{
+		TSet<uint32> CurVertexLayer = NextVertexLayer;
+		VisitedVertex.Append(CurVertexLayer);
+		NextVertexLayer.Empty();
+
+		for (const auto vtx : CurVertexLayer)
+		{
+			TArray<Link> links = Graph->getLinks(vtx);
+			for (const auto& link : links)
+			{
+				// 방문하지 않은 노드라면
+				if (!VisitedVertex.Contains(link.VertexIndex))
+				{
+					EnergyMap[link.VertexIndex] += EnergyMap[vtx] / (1 + link.linkVector.Size() * FACTOR_DIST_DAMPING);
+					EnergyMap_Contributed[link.VertexIndex]++;
+					NextVertexLayer.Emplace(link.VertexIndex);
+				}
+			}
+		}
+		for (const auto vtx : NextVertexLayer)
+			EnergyMap[vtx] = EnergyMap[vtx] / EnergyMap_Contributed[vtx];
+
+		// Update Graph Weight
+		for (const auto vtx : CurVertexLayer)
+		{
+			TArray<Link> links = Graph->getLinks(vtx);
+			for (const auto& link : links)
+			{
+				float NewWeight = (EnergyMap[link.VertexIndex] + EnergyMap[vtx]) / 2;
+				Graph->updateLink(vtx, link.VertexIndex, NewWeight);
+			}
+		}
+	}
+	
+	// Visualize Vertex Energy
+	/*
+	for (int32 i = 0; i < FEMComponent->TetMeshVertices.Num(); i++)
+	{
+		FVector WorldPosition = GetOwner()->GetActorTransform().TransformPosition(static_cast<FVector>(FEMComponent->TetMeshVertices[i]));
+
+		FColor color = FColor::Black;
+		color.G = 255 * (1 - EnergyMap[i] / Energy);
+		color.R = 255 * EnergyMap[i] / Energy;
+
+		DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, color, true, -1.0f, 0);
+	}
+	for (int32 i = 0; i < ImpactPoint.Num(); i++)
+	{
+		FVector WorldPosition = GetOwner()->GetActorTransform().TransformPosition(static_cast<FVector>(FEMComponent->TetMeshVertices[ImpactPoint[i]]));
+		DrawDebugPoint(GetWorld(), WorldPosition, 15.0f, FColor::White, true, -1.0f, 0);
+	}*/
 }
 
 // Called every frame
@@ -78,23 +151,61 @@ void UVoroTestComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 }
 
-TArray<uint32> UVoroTestComponent::getRandomVoronoiSites(const int32 VeticesSize)
+TArray<uint32> UVoroTestComponent::getVoronoiSeedByImpactPoint(const int32 SeedNum, const TArray<uint32> ImpactPoint)
 {
-	TArray<uint32> VoronoiSites;
+	WeightedGraph* Graph = &(FEMComponent->Graph);
+	TArray<uint32> VoronoiSeeds;
+	TSet<uint32> VisitedVertex;
+	TSet<uint32> NextVertexLayer;
+	
+	if (SeedNum <= 3)
+		VoronoiSeeds = getRandomElementsFromArray(ImpactPoint, SeedNum);
+	else
+	{
+		// 그래프 순회하며 주변 버텍스 선택
+		NextVertexLayer.Append(ImpactPoint);
+		while (VoronoiSeeds.Num() < SeedNum)
+		{
+			TSet<uint32> CurVertexLayer = NextVertexLayer;
+			VisitedVertex.Append(CurVertexLayer);
+			NextVertexLayer.Empty();
+
+			for (const auto vtx : CurVertexLayer)
+			{
+				TArray<Link> links = Graph->getLinks(vtx);
+				for (const auto& link : links)
+				{
+					if (!VisitedVertex.Contains(link.VertexIndex))
+						NextVertexLayer.Emplace(link.VertexIndex);
+				}
+			}
+			if ((NextVertexLayer.Num() + VoronoiSeeds.Num()) > SeedNum)
+				VoronoiSeeds.Append(getRandomElementsFromArray(NextVertexLayer.Array(), SeedNum - VoronoiSeeds.Num()));
+			else
+				VoronoiSeeds.Append(NextVertexLayer.Array());
+		}
+	}
+
+	VoronoiSeeds.Sort();
+	return VoronoiSeeds;
+}
+
+TArray<uint32> UVoroTestComponent::getVoronoiSeedByRandom(const int32 SeedNum)
+{
+	TArray<uint32> VoronoiSeeds;
 	TSet<uint32> SelectedIndices;
+	int32 VeticesSize = FEMComponent->TetMeshVertices.Num();
 
-	SiteNum = FMath::Min(SiteNum, VeticesSize);
-
-	while (SelectedIndices.Num() < SiteNum)
+	while (SelectedIndices.Num() < SeedNum)
 	{
 		// ���� �ε��� ����
 		uint32 RandomIndex = FMath::RandRange(0, VeticesSize - 1);
 		SelectedIndices.Emplace(RandomIndex);
 	}
-	VoronoiSites = SelectedIndices.Array();
-	VoronoiSites.Sort();
+	VoronoiSeeds = SelectedIndices.Array();
+	VoronoiSeeds.Sort();
 
-	return VoronoiSites;
+	return VoronoiSeeds;
 }
 
 void UVoroTestComponent::VisualizeVertices()
