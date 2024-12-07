@@ -32,15 +32,15 @@ void UVoroTestComponent::BeginPlay()
 	FEMComponent = GetOwner()->FindComponentByClass<UFEMCalculateComponent>();
 }
 
-void UVoroTestComponent::DestructMesh(const float Energy, const int32 SeedNum, const bool RandomSeed, const bool UseCVT)
+void UVoroTestComponent::DestructMesh(const float Energy)
 {
 	UpdateGraphWeight(Energy, FEMComponent->CurrentImpactPoint);
-	if (RandomSeed)
-		Seeds = getVoronoiSeedByRandom(SeedNum);
+	if (bUseRandomSeed)
+		Seeds = getVoronoiSeedByRandom();
 	else
-		Seeds = getVoronoiSeedByImpactPoint(SeedNum, FEMComponent->CurrentImpactPoint);
+		Seeds = getVoronoiSeedByImpactPoint(FEMComponent->CurrentImpactPoint);
 
-	if (UseCVT)
+	if (bUseCVT)
 	{
 		CVT CVT_inst;
 
@@ -151,7 +151,7 @@ void UVoroTestComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 }
 
-TArray<uint32> UVoroTestComponent::getVoronoiSeedByImpactPoint(const int32 SeedNum, const TArray<uint32> ImpactPoint)
+TArray<uint32> UVoroTestComponent::getVoronoiSeedByImpactPoint(const TArray<uint32> ImpactPoint)
 {
 	WeightedGraph* Graph = &(FEMComponent->Graph);
 	TArray<uint32> VoronoiSeeds;
@@ -164,7 +164,7 @@ TArray<uint32> UVoroTestComponent::getVoronoiSeedByImpactPoint(const int32 SeedN
 	{
 		// 그래프 순회하며 주변 버텍스 선택
 		NextVertexLayer.Append(ImpactPoint);
-		while (VoronoiSeeds.Num() < SeedNum)
+		while ((uint32)VoronoiSeeds.Num() < SeedNum)
 		{
 			TSet<uint32> CurVertexLayer = NextVertexLayer;
 			VisitedVertex.Append(CurVertexLayer);
@@ -179,7 +179,7 @@ TArray<uint32> UVoroTestComponent::getVoronoiSeedByImpactPoint(const int32 SeedN
 						NextVertexLayer.Emplace(link.VertexIndex);
 				}
 			}
-			if ((NextVertexLayer.Num() + VoronoiSeeds.Num()) > SeedNum)
+			if ((uint32)(NextVertexLayer.Num() + VoronoiSeeds.Num()) > SeedNum)
 				VoronoiSeeds.Append(getRandomElementsFromArray(NextVertexLayer.Array(), SeedNum - VoronoiSeeds.Num()));
 			else
 				VoronoiSeeds.Append(NextVertexLayer.Array());
@@ -190,13 +190,13 @@ TArray<uint32> UVoroTestComponent::getVoronoiSeedByImpactPoint(const int32 SeedN
 	return VoronoiSeeds;
 }
 
-TArray<uint32> UVoroTestComponent::getVoronoiSeedByRandom(const int32 SeedNum)
+TArray<uint32> UVoroTestComponent::getVoronoiSeedByRandom()
 {
 	TArray<uint32> VoronoiSeeds;
 	TSet<uint32> SelectedIndices;
 	int32 VeticesSize = FEMComponent->TetMeshVertices.Num();
 
-	while (SelectedIndices.Num() < SeedNum)
+	while ((uint32)SelectedIndices.Num() < SeedNum)
 	{
 		// ���� �ε��� ����
 		uint32 RandomIndex = FMath::RandRange(0, VeticesSize - 1);

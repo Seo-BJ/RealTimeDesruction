@@ -26,11 +26,18 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Dataflow")
 	bool bUseCVT;
+
 	UPROPERTY(EditAnywhere, Category = "Dataflow")
-	bool bMeshVisibility;
+	bool bUseRandomSeed;
+
+	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = (ClampMin = "1", ClampMax = "16"))
+	uint32 SeedNum = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dataflow", meta = (ClampMin = "0.01", ClampMax = "10"))
+	float DestructionThreshold = 0.5;
 
 	UFUNCTION(BlueprintCallable)
-	void DestructMesh(const float Energy, const int32 SeedNum, const bool RandomSeed, const bool UseCVT);
+	void DestructMesh(const float Energy);
 
 protected:
 	// Called when the game starts
@@ -45,8 +52,8 @@ private:
 	TArray<uint32> Seeds;
 	TArray<uint32> Region;
 
-	TArray<uint32> getVoronoiSeedByRandom(const int32 SeedNum);
-	TArray<uint32> getVoronoiSeedByImpactPoint(const int32 SeedNum, const TArray<uint32> ImpactPoint);
+	TArray<uint32> getVoronoiSeedByRandom();
+	TArray<uint32> getVoronoiSeedByImpactPoint(const TArray<uint32> ImpactPoint);
 	void VisualizeVertices();
 	void DestroyActor(const TMap<uint32, DistOutEntry>* Dist);
 	void UpdateGraphWeight(const float Energy, const TArray<uint32> ImpactPoint);
