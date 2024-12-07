@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "../DistanceCalculate/DistanceCalculate.h"
 #include "ProceduralMeshComponent.h"
+#include <shared_mutex>
 #include "../TetMesh/FEMCalculateComponent.h"
 
 // Not sure it is working...

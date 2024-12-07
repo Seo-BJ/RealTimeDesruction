@@ -11,12 +11,12 @@ TMap<uint32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, co
     TArray<uint32> Vertices = graph.Vertices();
     uint32 NumVertices = Vertices.Num();
 
-    TMap<uint32, TUniquePtr<std::atomic<double>>> GlobalDist; // Source¿¡¼­ ÇØ´ç Vertex±îÁöÀÇ ÃÖ´Ü °Å¸®
-    TMap<uint32, TUniquePtr<std::atomic<uint32>>> VisitedBy; // ÃÖ´Ü °Å¸®ÀÇ °æ·Î ÃßÀûÀ» À§ÇÑ ÀÌÀü °æ·Î Vertex
+    TMap<uint32, TUniquePtr<std::atomic<double>>> GlobalDist; // Sourceï¿½ï¿½ï¿½ï¿½ ï¿½Ø´ï¿½ Vertexï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ö´ï¿½ ï¿½Å¸ï¿½
+    TMap<uint32, TUniquePtr<std::atomic<uint32>>> VisitedBy; // ï¿½Ö´ï¿½ ï¿½Å¸ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ Vertex
     
-    TArray<DistOutEntry> DistOut; // ÃÖ´Ü °Å¸®, °¡Àå °¡±î¿î Source¸¦ ÀúÀå. °á°ú ¸®ÅÏÀ» À§ÇÔ
+    TArray<DistOutEntry> DistOut; // ï¿½Ö´ï¿½ ï¿½Å¸ï¿½, ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ Sourceï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½. ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 
-    //ÃÊ±âÈ­
+    //ï¿½Ê±ï¿½È­
     DistOut.Init({ MaxDouble, MaxUInt32 }, Vertices.Max());
 
     for (uint32 i = 0; i <= (uint32)Vertices.Max(); ++i)
@@ -25,7 +25,7 @@ TMap<uint32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, co
         VisitedBy.Add(i, MakeUnique<std::atomic<uint32>>(i));
     }
 
-    // SourceÀÇ ÃÖ´Ü °æ·Î´Â Source
+    // Sourceï¿½ï¿½ ï¿½Ö´ï¿½ ï¿½ï¿½Î´ï¿½ Source
     for (uint32 i = 0; i < NumSources; i++)
     {
         uint32 Src = Sources[i];
@@ -34,51 +34,60 @@ TMap<uint32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, co
         VisitedBy[Src]->store(Src);
     }
 
-    // º´·Ä Ã³¸®
-    //ParallelFor(NumSources, [&](uint32 i)
+    // ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
+    TArray<TFuture<void>> Futures;
+
     for (uint32 i = 0; i < NumSources; i++)
     {
-        using PII = TPair<double, uint32>;
-        std::priority_queue<PII, std::vector<PII>, std::greater<PII>> Q;
-
-        // ¿ì¼± ¼øÀ§ Å¥¿¡ ÃÖÃÊ °æ·Î »ðÀÔ
-        Q.emplace(0.0, Sources[i]);
-        while (!Q.empty())
-        {
-            PII Current = Q.top();
-            Q.pop();
-
-            auto [curDist, u] = Current;
-
-            for (const Link& link : graph.getLinks(u))
+        Futures.Add(Async(EAsyncExecution::ThreadPool, [&, i]()
             {
-                uint32 v = link.VertexIndex;
+                using PII = TPair<double, uint32>;
+                std::priority_queue<PII, std::vector<PII>, std::greater<PII>> Q;
 
-                // ÀÌ¹Ì À¯¸ÁÇÏÁö ¾Ê´Ù¸é Å»Ãâ
-                if (VisitedBy[v]->load() != v && GlobalDist[v]->load() <= curDist)
-                    continue;
-
-                // ´ÙÀ½ °æ·ÎÀÇ °Å¸® °è»ê
-                double NewDist = recalculateDistance(graph, u, v, GlobalDist[u]->load(), VisitedBy, k);
-
-                // °Å¸®°¡ Âª´Ù¸é ¾÷µ¥ÀÌÆ®
-                if (NewDist < GlobalDist[v]->load())
+                // ï¿½ì¼± ï¿½ï¿½ï¿½ï¿½ Å¥ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+                Q.emplace(0.0, Sources[i]);
+                while (!Q.empty())
                 {
+                    PII Current = Q.top();
+                    Q.pop();
+
+                    auto [curDist, u] = Current;
+
+                    for (const Link& link : graph.getLinks(u))
                     {
-                        // ½º·¹µå ¶ô
-                        std::unique_lock<std::shared_mutex> lock(PredMutex);
-                        GlobalDist[v]->store(NewDist);
-                        VisitedBy[v]->store(u);
+                        uint32 v = link.VertexIndex;
+
+                        // ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê´Ù¸ï¿½ Å»ï¿½ï¿½
+                        if (VisitedBy[v]->load() != v && GlobalDist[v]->load() <= curDist)
+                            continue;
+
+                        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Å¸ï¿½ ï¿½ï¿½ï¿½
+                        double NewDist = recalculateDistance(graph, u, v, GlobalDist[u]->load(), VisitedBy, k);
+
+                        // ï¿½Å¸ï¿½ï¿½ï¿½ Âªï¿½Ù¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
+                        if (NewDist < GlobalDist[v]->load())
+                        {
+                            {
+                                // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½
+                                std::unique_lock<std::shared_mutex> lock(PredMutex);
+                                GlobalDist[v]->store(NewDist);
+                                VisitedBy[v]->store(u);
+                            }
+                            Q.emplace(NewDist, v);
+                            DistOut[v] = { NewDist, Sources[i] };
+                        }
                     }
-                    Q.emplace(NewDist, v);
-                    DistOut[v] = { NewDist, Sources[i] };
                 }
             }
-        }
-        //});
+        ));
     }
 
-    // °á°ú
+    for (auto& Future : Futures)
+    {
+        Future.Wait();
+    }
+
+    // ï¿½ï¿½ï¿½
     TMap<uint32, DistOutEntry> Result;
     for (uint32 i = 0; i < (uint32)Vertices.Max(); ++i)
         if (DistOut[i].Weight != MaxDouble)
@@ -87,24 +96,24 @@ TMap<uint32, DistOutEntry> DistanceCalculate::Calculate(WeightedGraph& graph, co
     return Result;
 }
 
-// ¹æÇâ º¤ÅÍ¸¦ °í·ÁÇÑ °Å¸® °è»ê
+// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Í¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Å¸ï¿½ ï¿½ï¿½ï¿½
 double DistanceCalculate::recalculateDistance(WeightedGraph& graph, const uint32& u, const uint32& v, const double& Dist, const TMap<uint32, TUniquePtr<std::atomic<uint32>>>& Pred, const int& k)
 {
     double correctedDist = 0.0;
     TArray<FVector> totalVector;
     uint32 current = v;
 
-    // ÃÊ±â °Å¸®
+    // ï¿½Ê±ï¿½ ï¿½Å¸ï¿½
     const Link* edge = graph.getLink(u, v);
     correctedDist += edge->linkVector.Size() + edge->weight;
     
     {
-        // ½º·¹µå ¶ô
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½
         std::shared_lock<std::shared_mutex> lock(PredMutex);
 
         for (int32 i = 0; i < k; ++i)
         {
-            // ÀÌÀü °æ·Î Å½»ö
+            // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ Å½ï¿½ï¿½
             uint32 pred_i = (current == v ? u : getPredecessor(current, Pred));
 
             if (pred_i == current || pred_i == MaxUInt32) break;
@@ -112,14 +121,14 @@ double DistanceCalculate::recalculateDistance(WeightedGraph& graph, const uint32
             edge = graph.getLink(pred_i, current);
             if (!edge) break;
 
-            // °æ·Î º¤ÅÍ ÀúÀå
+            // ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
             FVector edgeVector = edge->linkVector;
             totalVector.Add(edgeVector);
             current = pred_i;
         }
     }
 
-    // ³»ÀûÇÏ¿© °æ·ÎÀÇ ¹æÇâ °è»ê
+    // ï¿½ï¿½ï¿½ï¿½ï¿½Ï¿ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
     if (totalVector.Num() > 1)
     {
         FVector prevDirection = totalVector[0].GetSafeNormal();
@@ -136,7 +145,7 @@ double DistanceCalculate::recalculateDistance(WeightedGraph& graph, const uint32
     return Dist + correctedDist;
 }
 
-// ÀÌÀü °æ·Î Vertex Å½»ö
+// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ Vertex Å½ï¿½ï¿½
 uint32 DistanceCalculate::getPredecessor(const uint32& vertex, const TMap<uint32, TUniquePtr<std::atomic<uint32>>>& Pred)
 {
     auto it = Pred.Find(vertex);
