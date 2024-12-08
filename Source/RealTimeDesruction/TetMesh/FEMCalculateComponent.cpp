@@ -5,7 +5,6 @@
 
 #include "FTetWildWrapper.h"
 #include "Engine/StaticMesh.h"
-#include "TetMeshGenerateComponent.h"
 
 #include "FTetWildWrapper.h"
 
