@@ -275,6 +275,7 @@ void UVoroTestComponent::DestroyActor(const TMap<uint32, DistOutEntry>* Dist)
 	{
 		FVector SpawnLocation = GetOwner()->GetActorLocation();
 		FRotator SpawnRotation = GetOwner()->GetActorRotation();
+		FVector SpawnScale = GetOwner()->GetActorScale();
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
@@ -286,6 +287,7 @@ void UVoroTestComponent::DestroyActor(const TMap<uint32, DistOutEntry>* Dist)
 			continue;
 		}
 
+		NewActor->SetActorScale3D(SpawnScale);
 		NewActor->SetProceduralMesh(Meshes.FindRef(key[i]), MeshComponent->GetMaterials());
 		NewActor->GenerateCollisionConvexMesh();
 	}
