@@ -220,7 +220,8 @@ TMap<uint32, TArray<FIntVector4>> SplitMesh::SplitTetra(const FIntVector4& tetra
 		uint32 NewIndexM23;
 
 		{
-			std::unique_lock<std::shared_mutex> lock(vertexMutex);
+			std::uniqu
+			e_lock<std::shared_mutex> lock(vertexMutex);
 			NewIndexM01 = NumVertices++;
 			NewIndexM02 = NumVertices++;
 			NewIndexM03 = NumVertices++;
