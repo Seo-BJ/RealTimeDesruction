@@ -153,19 +153,19 @@ public:
 	double EpsRel = 1e-3;
 
 	//! Coarsen the tet mesh result.
-	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = ())
+	UPROPERTY(EditAnywhere, Category = "Dataflow")
 	bool bCoarsen = true;
 
 	//! Enforce that the output boundary surface should be manifold.
-	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = ())
+	UPROPERTY(EditAnywhere, Category = "Dataflow")
 	bool bExtractManifoldBoundarySurface = false;
 
 	//! Skip the initial simplification step.
-	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = ())
+	UPROPERTY(EditAnywhere, Category = "Dataflow")
 	bool bSkipSimplification = false;
 
 	//! Invert tetrahedra.
-	UPROPERTY(EditAnywhere, Category = "Dataflow", meta = ())
+	UPROPERTY(EditAnywhere, Category = "Dataflow")
 	bool bInvertOutputTets = false;
 
 	// 전체 정점 위치 배열
@@ -328,6 +328,14 @@ private:
 	void KMatrixParallel();
 
 	/**
+	 * 단일 사면체의 12x12 강성 행렬 계산 (공통 로직)
+	 *
+	 * KMatrixSequential / KMatrixParallel 양쪽에서 호출되는 공통 계산 함수
+	 * 공식: K = V * B^T * E * B
+	 */
+	Matrix<float, 12, 12> ComputeKElementForTet(int32 TetIndex) const;
+
+	/**
 	 * B 행렬 (변형률-변위 행렬, Strain-Displacement Matrix) 생성
 	 *
 	 * @param Matrix - 형상함수 미분 행렬 (4x3)
@@ -343,7 +351,7 @@ private:
 	 *
 	 * 입력은 형상함수의 전역 좌표 미분 행렬 (∂Ni/∂x, ∂Ni/∂y, ∂Ni/∂z)
 	 */
-	Matrix<float, 6, 12> BMatrix(Matrix<float, 4, 3> Matrix);
+	Matrix<float, 6, 12> BMatrix(Matrix<float, 4, 3> Matrix) const;
 
 	/**
 	 * Jacobian 행렬 계산
@@ -361,7 +369,7 @@ private:
 	 *
 	 * Jacobian의 행렬식은 사면체 부피와 직접 관련
 	 */
-	Matrix<float, 3, 3> Jacobian(Matrix<float, 3, 4> PositionMatrix);
+	Matrix<float, 3, 3> Jacobian(Matrix<float, 3, 4> PositionMatrix) const;
 
 	/**
 	 * E 행렬 (탄성 행렬, Elasticity Matrix) 생성
@@ -376,7 +384,7 @@ private:
 	 * - 비대각 요소: Poisson 효과 (한 방향 변형이 다른 방향에 미치는 영향)
 	 * - 하단 대각: 전단 응력-변형률 관계
 	 */
-	Matrix<float, 6, 6> EMatrix();
+	Matrix<float, 6, 6> EMatrix() const;
 
 	/**
 	 * Jacobian 행렬로부터 사면체 부피 계산
@@ -386,7 +394,7 @@ private:
 	 *
 	 * 공식: V = |det(J)| / 6
 	 */
-	float GetTetVolume(Matrix<float, 3, 3> Jaco);
+	float GetTetVolume(Matrix<float, 3, 3> Jaco) const;
 
 	/**
 	 * 주어진 위치에서 가장 가까운 삼각형 면과 사면체 찾기
@@ -402,7 +410,7 @@ private:
 	/** 방법 1: 순차적 탐색 방식 */
 	FInt32Vector4 GetClosestTriangleAndTetSequential(const FVector& HitPosition, int32& OutExcludedIndex);
 
-	/** 방법 2: 병렬 탐색 방식 (Mutex 사용) */
+	/** 방법 2: 병렬 탐색 방식 (Double-Checked Locking) */
 	FInt32Vector4 GetClosestTriangleAndTetParallel(const FVector& HitPosition, int32& OutExcludedIndex);
 
 	/** 방법 3: 병렬 탐색 방식 (Mutex 최적화 - 단일 Lock) */
@@ -410,6 +418,30 @@ private:
 
 	/** 방법 4: 병렬 탐색 방식 (Lock-Free, 스레드별 로컬 결과) */
 	FInt32Vector4 GetClosestTriangleAndTetParallel_LockFree(const FVector& HitPosition, int32& OutExcludedIndex);
+
+	// -------------------------------------------------------------------------
+	// GetClosestTriangleAndTet 계열 공통 헬퍼
+	// -------------------------------------------------------------------------
+
+	/** 한 사면체의 4개 삼각형 중 HitPosition에 가장 가까운 삼각형의 탐색 결과 */
+	struct FTriangleSearchResult
+	{
+		float MinDistance = FLT_MAX;
+		int32 TetIndex    = -1;
+		int32 TriIndex    = -1;  // 0~3: 4개 삼각형 (ABC, ABD, ACD, BCD) 중 어느 것
+	};
+
+	/**
+	 * 한 사면체(TetIndex)의 4개 삼각형 중 HitPosition에 가장 가까운 삼각형 탐색
+	 * Sequential / Parallel 모든 버전의 공통 inner-loop 로직
+	 */
+	FTriangleSearchResult ComputeLocalMinForTet(int32 TetIndex, const FVector& HitPosition) const;
+
+	/**
+	 * FTriangleSearchResult → FInt32Vector4(결과) + OutExcludedIndex 변환
+	 * 삼각형 인덱스 매핑 테이블을 한 곳에서 관리
+	 */
+	static FInt32Vector4 BuildSearchResult(const FTriangleSearchResult& SR, int32& OutExcludedIndex);
 	
 	/**
 	 * 점과 삼각형 평면 사이의 거리 계산
@@ -422,7 +454,7 @@ private:
 	 * 거리 = |n · (p - a)| / |n|
 	 * 여기서 n은 법선 벡터, p는 대상 점, a는 삼각형의 한 정점
 	 */
-	float DistanceToTriangle(const FVector& OtherPoint, const FVector& PointA, const FVector& PointB, const FVector& PointC);
+	float DistanceToTriangle(const FVector& OtherPoint, const FVector& PointA, const FVector& PointB, const FVector& PointC) const;
 	
 	template <typename T>
 	void LogMatrix(const T& Matrix, const FString& MatrixName)

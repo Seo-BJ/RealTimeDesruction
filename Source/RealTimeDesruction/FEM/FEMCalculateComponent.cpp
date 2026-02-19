@@ -94,10 +94,10 @@ void UFEMCalculateComponent::InitializeTetMesh()
         {
             BenchmarkSearchPerformance();
         }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Failed to Generate tet mesh!"));
-        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to Generate tet mesh!"));
     }
 }
 
@@ -337,9 +337,9 @@ void UFEMCalculateComponent::BenchmarkSearchPerformance()
         return GetClosestTriangleAndTetParallel_Mutex(P, E); 
     });
 
-    // 4. Parallel_LockFree (Buggy Version)
-    RunTest(TEXT("Parallel_LockFree (Buggy)"), [&](const FVector& P, int32& E) { 
-        return GetClosestTriangleAndTetParallel_LockFree(P, E); 
+    // 4. Parallel_LockFree (Chunk-based)
+    RunTest(TEXT("Parallel_LockFree (Chunk)"), [&](const FVector& P, int32& E) {
+        return GetClosestTriangleAndTetParallel_LockFree(P, E);
     });
     
     UE_LOG(LogTemp, Warning, TEXT("========================================"));
@@ -527,111 +527,68 @@ void UFEMCalculateComponent::KMatrix()
     }
 }
 
+Matrix<float, 12, 12> UFEMCalculateComponent::ComputeKElementForTet(int32 TetIndex) const
+{
+    // 정점 인덱스 추출
+    const FIntVector4& Tet = Tets[TetIndex];
+    const int32 VertexIndex[4] = { Tet.X, Tet.Y, Tet.Z, Tet.W };
+
+    // 3x4 위치 행렬 구성
+    Matrix<float, 3, 4> Demention;
+    for (int vtx = 0; vtx < 4; vtx++)
+    {
+        for (int dim = 0; dim < 3; dim++)
+        {
+            Demention(dim, vtx) = UndeformedPositions[3 * VertexIndex[vtx] + dim];
+        }
+    }
+
+    // Jacobian 행렬 계산 (로컬 → 전역 좌표 변환)
+    const Matrix<float, 3, 3> Jaco = Jacobian(Demention);
+
+    // 형상함수(Shape Function) 미분 행렬 구성 (상수)
+    // 사면체의 4개 형상함수: N1 = 1-ξ-η-ζ, N2 = ξ, N3 = η, N4 = ζ
+    static const Matrix<float, 4, 3> ShapeFunctionDiffMatrix = []()
+    {
+        Matrix<float, 4, 3> M;
+        M.setZero();
+        M(0, 0) = -1; M(0, 1) = -1; M(0, 2) = -1;  // ∂N1/∂ξ, ∂N1/∂η, ∂N1/∂ζ
+        M(1, 0) =  1;                                 // ∂N2/∂ξ = 1
+        M(2, 1) =  1;                                 // ∂N3/∂η = 1
+        M(3, 2) =  1;                                 // ∂N4/∂ζ = 1
+        return M;
+    }();
+
+    // 전역 좌표계에 대한 형상함수 미분: ∂N/∂x = ∂N/∂ξ * J^-1
+    const Matrix<float, 4, 3> Result = ShapeFunctionDiffMatrix * Jaco.inverse();
+    const float Volume = GetTetVolume(Jaco);
+
+    // K = V * B^T * E * B
+    const Matrix<float, 6, 12> MatrixB = BMatrix(Result);
+    const Matrix<float, 6, 6>  MatrixE = EMatrix();
+    return Volume * MatrixB.transpose() * MatrixE * MatrixB;
+}
+
 void UFEMCalculateComponent::KMatrixSequential()
 {
     KElements.SetNum(Tets.Num());
-
-    // 각 사면체에 대해 반복
     for (int32 i = 0; i < Tets.Num(); i++)
     {
-        Matrix<float, 3, 4> Demention;
-        // 사면체의 4개 정점 인덱스
-        TArray<int32> VertexIndex;
-        VertexIndex.Add(Tets[i].X);
-        VertexIndex.Add(Tets[i].Y);
-        VertexIndex.Add(Tets[i].Z);
-        VertexIndex.Add(Tets[i].W);
-
-        // 3x4 위치 행렬 구성
-        for (int vtx = 0; vtx < 4; vtx++)
-        {
-            for (int dim = 0; dim < 3; dim++)
-            {
-                Demention(dim, vtx) = UndeformedPositions[3 * VertexIndex[vtx] + dim];
-            }
-        }
-
-        // Jacobian 행렬 계산 (로컬 → 전역 좌표 변환)
-        const Matrix<float, 3, 3> Jaco = Jacobian(Demention);
-
-        // 형상함수(Shape Function) 미분 행렬 구성
-        // 사면체의 4개 형상함수: N1 = 1-ξ-η-ζ, N2 = ξ, N3 = η, N4 = ζ
-        // 각 형상함수를 ξ, η, ζ에 대해 미분
-        Matrix<float, 4, 3> ShapeFunctionDiffMatrix;
-        ShapeFunctionDiffMatrix.setZero();
-        ShapeFunctionDiffMatrix(0, 0) = -1;  // ∂N1/∂ξ, ∂N1/∂η, ∂N1/∂ζ
-        ShapeFunctionDiffMatrix(0, 1) = -1;
-        ShapeFunctionDiffMatrix(0, 2) = -1;
-        ShapeFunctionDiffMatrix(1, 0) = 1;   // ∂N2/∂ξ = 1
-        ShapeFunctionDiffMatrix(2, 1) = 1;   // ∂N3/∂η = 1
-        ShapeFunctionDiffMatrix(3, 2) = 1;   // ∂N4/∂ζ = 1
-
-        // 전역 좌표계에 대한 형상함수 미분: ∂N/∂x = ∂N/∂ξ * J^-1
-        Matrix<float, 4, 3> Result = ShapeFunctionDiffMatrix * Jaco.inverse();
-        float Volume = GetTetVolume(Jaco);
-
-        // B 행렬(변형률-변위 행렬) 생성
-        const Matrix<float, 6, 12> MatrixB = BMatrix(Result);
-
-        // E 행렬(탄성 행렬) 생성
-        Matrix<float, 6, 6> MatrixE = EMatrix();
-
-        // 강성 행렬 계산: K = V * B^T * E * B
-        KElements[i] = Volume * MatrixB.transpose() * MatrixE * MatrixB;
+        KElements[i] = ComputeKElementForTet(i);
     }
 }
 
 void UFEMCalculateComponent::KMatrixParallel()
 {
     KElements.SetNum(Tets.Num());
-
-    // ParallelFor를 사용한 병렬 처리
+    // 각 스레드가 서로 다른 인덱스에만 쓰므로 동기화 불필요
     ParallelFor(Tets.Num(), [&](int32 i)
     {
-        Matrix<float, 3, 4> Demention;
-
-        // 4개의 정점 인덱스 가져오기
-        TArray<int32> VertexIndex;
-        VertexIndex.Add(Tets[i].X);
-        VertexIndex.Add(Tets[i].Y);
-        VertexIndex.Add(Tets[i].Z);
-        VertexIndex.Add(Tets[i].W);
-
-        // 3x4 위치 행렬 Dm 구축
-        for (int vtx = 0; vtx < 4; vtx++)
-        {
-            for (int dim = 0; dim < 3; dim++)
-            {
-                Demention(dim, vtx) = UndeformedPositions[3 * VertexIndex[vtx] + dim];
-            }
-        }
-
-        // 야코비안 행렬 계산
-        Matrix<float, 3, 3> Jaco = Jacobian(Demention);
-
-        // 형상함수 행렬 구성
-        Matrix<float, 4, 3> ShapeFunctionDiffMatrix;
-        ShapeFunctionDiffMatrix.setZero();
-        ShapeFunctionDiffMatrix(0, 0) = -1;
-        ShapeFunctionDiffMatrix(0, 1) = -1;
-        ShapeFunctionDiffMatrix(0, 2) = -1;
-        ShapeFunctionDiffMatrix(1, 0) = 1;
-        ShapeFunctionDiffMatrix(2, 1) = 1;
-        ShapeFunctionDiffMatrix(3, 2) = 1;
-
-        // 각각 형상함수의 각 x, y, z 축에 대한 미분 행렬 계산
-        const Matrix<float, 4, 3> Result = ShapeFunctionDiffMatrix * Jaco.inverse();
-        const float Volume = GetTetVolume(Jaco);
-        const Matrix<float, 6, 12> MatrixB = BMatrix(Result);
-        const Matrix<float, 6, 6> MatrixE = EMatrix();
-
-        // 각 사면체의 강성 행렬을 독립적으로 계산
-        // 각 스레드가 다른 인덱스에 접근하므로 동기화 불필요
-        KElements[i] = Volume * MatrixB.transpose() * MatrixE * MatrixB;
+        KElements[i] = ComputeKElementForTet(i);
     });
 }
 
-Matrix<float, 6, 12> UFEMCalculateComponent::BMatrix(Matrix<float, 4, 3> M)
+Matrix<float, 6, 12> UFEMCalculateComponent::BMatrix(Matrix<float, 4, 3> M) const
 {
     // B 행렬을 Eigen 초기화 리스트로 직접 구성
     // 각 행은 특정 변형률 성분에 대응
@@ -653,7 +610,7 @@ Matrix<float, 6, 12> UFEMCalculateComponent::BMatrix(Matrix<float, 4, 3> M)
     return B;
 }
 
-Matrix<float, 3, 3> UFEMCalculateComponent::Jacobian(Matrix<float, 3, 4> PositionMatrix)
+Matrix<float, 3, 3> UFEMCalculateComponent::Jacobian(Matrix<float, 3, 4> PositionMatrix) const
 {
     Matrix<float, 3, 3> Result;
     Result.setZero();
@@ -677,7 +634,7 @@ Matrix<float, 3, 3> UFEMCalculateComponent::Jacobian(Matrix<float, 3, 4> Positio
     return Result / 100;
 }
 
-Matrix<float, 6, 6> UFEMCalculateComponent::EMatrix()
+Matrix<float, 6, 6> UFEMCalculateComponent::EMatrix() const
 {
     // E 행렬을 Eigen 초기화 리스트로 직접 구성
     Matrix<float, 6, 6> E;
@@ -694,7 +651,7 @@ Matrix<float, 6, 6> UFEMCalculateComponent::EMatrix()
     return E;
 }
 
-float UFEMCalculateComponent::GetTetVolume(Matrix<float, 3, 3> Jaco)
+float UFEMCalculateComponent::GetTetVolume(Matrix<float, 3, 3> Jaco) const
 {
     return Jaco.determinant() / 6;
 }
@@ -727,317 +684,167 @@ FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTet(const FVector& Hi
     return Result;
 }
 
-FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTetSequential(const FVector& HitPosition, int32& OutExcludedIndex)
+UFEMCalculateComponent::FTriangleSearchResult UFEMCalculateComponent::ComputeLocalMinForTet(int32 TetIndex, const FVector& HitPosition) const
 {
-    float TriMinDistance = FLT_MAX;
-    FInt32Vector4 Result = {0, 0, 0, 0};
+    const FIntVector4& Tet = Tets[TetIndex];
+    const FVector A = TetMeshVertices[Tet.X];
+    const FVector B = TetMeshVertices[Tet.Y];
+    const FVector C = TetMeshVertices[Tet.Z];
+    const FVector D = TetMeshVertices[Tet.W];
 
-    // 모든 사면체에 대해 순차적으로 확인
-    for (int i = 0; i < Tets.Num(); ++i)
+    // 사면체의 4개 표면 삼각형에 대해 거리 계산 (ABC, ABD, ACD, BCD)
+    const float Distances[4] = {
+        DistanceToTriangle(HitPosition, A, B, C),
+        DistanceToTriangle(HitPosition, A, B, D),
+        DistanceToTriangle(HitPosition, A, C, D),
+        DistanceToTriangle(HitPosition, B, C, D)
+    };
+
+    int32 MinIndex = 0;
+    float MinDist = Distances[0];
+    for (int32 j = 1; j < 4; ++j)
     {
-        // 현재 사면체의 4개 정점
-        const FIntVector4& Tet = Tets[i];
-
-        FVector A = TetMeshVertices[Tet.X];
-        FVector B = TetMeshVertices[Tet.Y];
-        FVector C = TetMeshVertices[Tet.Z];
-        FVector D = TetMeshVertices[Tet.W];
-
-        // 사면체의 4개 표면 삼각형에 대해 거리 계산
-        // 각 사면체는 4개 정점으로 4개의 삼각형 면을 가짐
-        // 1) 삼각형 ABC (정점 D 제외)
-        const float Distance1 = DistanceToTriangle(HitPosition, A, B, C);
-
-        // 2) 삼각형 ABD (정점 C 제외)
-        const float Distance2 = DistanceToTriangle(HitPosition, A, B, D);
-
-        // 3) 삼각형 ACD (정점 B 제외)
-        const float Distance3 = DistanceToTriangle(HitPosition, A, C, D);
-
-        // 4) 삼각형 BCD (정점 A 제외)
-        const float Distance4 = DistanceToTriangle(HitPosition, B, C, D);
-
-        // 4개 삼각형 중 가장 가까운 것 선택
-        TArray<float> Distances = { Distance1, Distance2, Distance3, Distance4 };
-        int32 MinIndex = -1;
-        FMath::Min(Distances, &MinIndex);
-        float CurrentTriMinDistance = Distances[MinIndex];
-
-        // 전역 최소값과 비교하여 업데이트
-        if (CurrentTriMinDistance < TriMinDistance)
+        if (Distances[j] < MinDist)
         {
-            Result[0] = i;  // 사면체 인덱스
-            TriMinDistance = CurrentTriMinDistance;
-
-            // 선택된 삼각형에 따라 정점 인덱스와 제외 정점 설정
-            switch (MinIndex)
-            {
-            case 0:  // ABC 삼각형 선택
-                Result[1] = 1;
-                Result[2] = 2;
-                Result[3] = 3;
-                OutExcludedIndex = 4;  // D 정점 제외
-                break;
-            case 1:  // ABD 삼각형 선택
-                Result[1] = 1;
-                Result[2] = 2;
-                Result[3] = 4;
-                OutExcludedIndex = 3;  // C 정점 제외
-                break;
-            case 2:  // ACD 삼각형 선택
-                Result[1] = 1;
-                Result[2] = 3;
-                Result[3] = 4;
-                OutExcludedIndex = 2;  // B 정점 제외
-                break;
-            case 3:  // BCD 삼각형 선택
-                Result[1] = 2;
-                Result[2] = 3;
-                Result[3] = 4;
-                OutExcludedIndex = 1;  // A 정점 제외
-                break;
-            }
+            MinDist = Distances[j];
+            MinIndex = j;
         }
     }
+
+    return { MinDist, TetIndex, MinIndex };
+}
+
+FInt32Vector4 UFEMCalculateComponent::BuildSearchResult(const FTriangleSearchResult& SR, int32& OutExcludedIndex)
+{
+    // 삼각형 인덱스 → [Vertex1, Vertex2, Vertex3] 매핑
+    // 0: ABC (D 제외), 1: ABD (C 제외), 2: ACD (B 제외), 3: BCD (A 제외)
+    static constexpr int32 TriangleVertices[4][3] = {
+        {1, 2, 3}, {1, 2, 4}, {1, 3, 4}, {2, 3, 4}
+    };
+    static constexpr int32 ExcludedIndices[4] = {4, 3, 2, 1};
+
+    FInt32Vector4 Result;
+    Result[0] = SR.TetIndex;
+    Result[1] = TriangleVertices[SR.TriIndex][0];
+    Result[2] = TriangleVertices[SR.TriIndex][1];
+    Result[3] = TriangleVertices[SR.TriIndex][2];
+    OutExcludedIndex = ExcludedIndices[SR.TriIndex];
     return Result;
+}
+
+FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTetSequential(const FVector& HitPosition, int32& OutExcludedIndex)
+{
+    FTriangleSearchResult Best;
+
+    for (int i = 0; i < Tets.Num(); ++i)
+    {
+        FTriangleSearchResult Local = ComputeLocalMinForTet(i, HitPosition);
+        if (Local.MinDistance < Best.MinDistance)
+        {
+            Best = Local;
+        }
+    }
+    return BuildSearchResult(Best, OutExcludedIndex);
 }
 
 FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTetParallel(const FVector& HitPosition, int32& OutExcludedIndex)
 {
-    // 공유 변수 (모든 스레드가 접근)
-    std::atomic<float> GlobalTriMinDistance(FLT_MAX);
-    FCriticalSection Mutex;  // 결과 업데이트 시 동기화
-    FInt32Vector4 GlobalResult = {0, 0, 0, 0};
-    int32 GlobalExcludedIndex = 0;
+    // [동기화 전략: Double-Checked Locking]
+    // atomic으로 1차 필터링 → Lock은 실제 갱신 시에만 진입
+    std::atomic<float> GlobalMinDistance(FLT_MAX);
+    FCriticalSection Mutex;
+    FTriangleSearchResult GlobalBest;
 
-    // ParallelFor를 사용하여 병렬 탐색
     ParallelFor(Tets.Num(), [&](int32 i)
     {
-        // 현재 사면체의 4개 정점 인덱스
-        const FIntVector4& Tet = Tets[i];
+        FTriangleSearchResult Local = ComputeLocalMinForTet(i, HitPosition);
 
-        // 사면체의 4개 정점
-        FVector A = TetMeshVertices[Tet.X];
-        FVector B = TetMeshVertices[Tet.Y];
-        FVector C = TetMeshVertices[Tet.Z];
-        FVector D = TetMeshVertices[Tet.W];
-
-        // 사면체의 4개의 삼각형 면에 대해 거리 계산
-        float Distances[4] = {
-                    DistanceToTriangle(HitPosition, A, B, C),
-                    DistanceToTriangle(HitPosition, A, B, D),
-                    DistanceToTriangle(HitPosition, A, C, D),
-                    DistanceToTriangle(HitPosition, B, C, D)
-                };
-
-        int32 MinIndex = 0;
-        float LocalMinDistance = Distances[0];
-        for (int32 j = 1; j < 4; ++j)
+        // 1차 검사 (Lock-Free): 대부분의 스레드는 여기서 걸러짐
+        if (Local.MinDistance < GlobalMinDistance.load())
         {
-            if (Distances[j] < LocalMinDistance)
-            {
-                LocalMinDistance = Distances[j];
-                MinIndex = j;
-            }
-        }
-
-        // [동기화 전략: Double-Checked Locking]
-        // 1차 검사 (Lock-Free)
-        float CurrentGlobalMin = GlobalTriMinDistance.load();
-        if (LocalMinDistance < CurrentGlobalMin)
-        {
-            // Critical section으로 보호 (동시 접근 방지)
             FScopeLock Lock(&Mutex);
-
-            // 2차 검사 (Inside Lock) : 다른 스레드가 이미 더 작은 값을 설정했을 수 있음
-            if (LocalMinDistance < GlobalTriMinDistance.load())
+            // 2차 검사 (Inside Lock): 다른 스레드가 이미 더 작은 값을 설정했을 수 있음
+            if (Local.MinDistance < GlobalMinDistance.load())
             {
-                GlobalTriMinDistance.store(LocalMinDistance);
-                GlobalResult[0] = i;
-
-                static const int32 TriangleIndices[4][3] = {{1, 2, 3}, {1, 2, 4}, {1, 3, 4}, {2, 3, 4}};
-                static const int32 ExcludedIndices[4] = {4, 3, 2, 1};
-
-                GlobalResult[1] = TriangleIndices[MinIndex][0];
-                GlobalResult[2] = TriangleIndices[MinIndex][1];
-                GlobalResult[3] = TriangleIndices[MinIndex][2];
-                GlobalExcludedIndex = ExcludedIndices[MinIndex];
+                GlobalMinDistance.store(Local.MinDistance);
+                GlobalBest = Local;
             }
         }
     });
 
-    OutExcludedIndex = GlobalExcludedIndex;
-    return GlobalResult;
+    return BuildSearchResult(GlobalBest, OutExcludedIndex);
 }
 
 FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTetParallel_Mutex(
     const FVector& HitPosition, int32& OutExcludedIndex)
 {
+    // 단일 Lock으로 모든 공유 데이터 보호 (단순하지만 경합 발생 가능)
     FCriticalSection Mutex;
-    float GlobalMinDistance = FLT_MAX;
-    FInt32Vector4 GlobalResult = {0, 0, 0, 0};
-    int32 GlobalExcludedIndex = 0;
+    FTriangleSearchResult GlobalBest;
 
     ParallelFor(Tets.Num(), [&](int32 i)
     {
-        const FIntVector4& Tet = Tets[i];
-        FVector A = TetMeshVertices[Tet.X];
-        FVector B = TetMeshVertices[Tet.Y];
-        FVector C = TetMeshVertices[Tet.Z];
-        FVector D = TetMeshVertices[Tet.W];
+        FTriangleSearchResult Local = ComputeLocalMinForTet(i, HitPosition);
 
-        float Distances[4] = {
-            DistanceToTriangle(HitPosition, A, B, C),
-            DistanceToTriangle(HitPosition, A, B, D),
-            DistanceToTriangle(HitPosition, A, C, D),
-            DistanceToTriangle(HitPosition, B, C, D)
-        };
-
-        int32 MinIndex = 0;
-        float LocalMinDistance = Distances[0];
-        for (int32 j = 1; j < 4; ++j)
-        {
-            if (Distances[j] < LocalMinDistance)
-            {
-                LocalMinDistance = Distances[j];
-                MinIndex = j;
-            }
-        }
-
-        // 단일 Lock으로 모든 공유 데이터 보호
         FScopeLock Lock(&Mutex);
-        if (LocalMinDistance < GlobalMinDistance)
+        if (Local.MinDistance < GlobalBest.MinDistance)
         {
-            GlobalMinDistance = LocalMinDistance;
-            GlobalResult[0] = i;
-
-            // 테이블 기반으로 단순화
-            static const int32 TriangleIndices[4][3] = {
-                {1, 2, 3}, {1, 2, 4}, {1, 3, 4}, {2, 3, 4}
-            };
-            static const int32 ExcludedIndices[4] = {4, 3, 2, 1};
-
-            GlobalResult[1] = TriangleIndices[MinIndex][0];
-            GlobalResult[2] = TriangleIndices[MinIndex][1];
-            GlobalResult[3] = TriangleIndices[MinIndex][2];
-            GlobalExcludedIndex = ExcludedIndices[MinIndex];
+            GlobalBest = Local;
         }
     });
 
-    OutExcludedIndex = GlobalExcludedIndex;
-    return GlobalResult;
+    return BuildSearchResult(GlobalBest, OutExcludedIndex);
 }
 
 FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTetParallel_LockFree(const FVector& HitPosition, int32& OutExcludedIndex)
 {
-    // 스레드별 로컬 결과 저장소
-    struct FThreadLocalResult
-    {
-        float MinDistance = FLT_MAX;
-        int32 TetIndex = -1;
-        int32 TriangleIndex = -1;
-    };
-
-    // [핵심 2] 작업자 스레드(Worker Thread) 수만큼 메모리 확보
-    // 언리얼 엔진의 워커 스레드 수를 가져옵니다.
+    // Worker 수만큼 슬롯을 미리 확보하고, 각 Worker가 담당 범위를 직접 순회
+    // → GetCurrentThreadIfKnown()의 enum 값 의존 없이 진정한 Lock-Free 보장
     const int32 NumWorkers = FTaskGraphInterface::Get().GetNumWorkerThreads();
-    const int32 MaxThreads = NumWorkers + 5; 
+    const int32 NumTets    = Tets.Num();
+    const int32 ChunkSize  = FMath::DivideAndRoundUp(NumTets, NumWorkers);
 
-    TArray<FThreadLocalResult> ThreadResults;
-    ThreadResults.AddDefaulted(MaxThreads);
+    TArray<FTriangleSearchResult> ThreadResults;
+    ThreadResults.AddDefaulted(NumWorkers);
 
-    // (Lock-Free)
-    ParallelFor(Tets.Num(), [&](int32 i)
+    // ParallelFor의 인덱스 = WorkerIndex (0 ~ NumWorkers-1)
+    // 각 Worker는 ThreadResults[WorkerIndex] 슬롯에만 접근 → 동기화 불필요
+    ParallelFor(NumWorkers, [&](int32 WorkerIndex)
     {
-        // 현재 코드를 실행 중인 스레드의 고유 인덱스를 가져옵니다.
-        // 언리얼의 TaskGraph 시스템상 워커 스레드는 고유한 인덱스를 가집니다.
-        int32 ThreadIndex = FTaskGraphInterface::Get().GetCurrentThreadIfKnown();
-        
-        if (ThreadIndex < 0 || ThreadIndex >= MaxThreads -1)
-        {
-            ThreadIndex = MaxThreads -1; 
-        }
+        const int32 Begin = WorkerIndex * ChunkSize;
+        const int32 End   = FMath::Min(Begin + ChunkSize, NumTets);
 
-        // 내 전용 메모리 슬롯 가져오기 (참조)
-        FThreadLocalResult& LocalResult = ThreadResults[ThreadIndex];
-        
-        const FIntVector4& Tet = Tets[i];
-        FVector Verts[4] = {
-            TetMeshVertices[Tet.X],
-            TetMeshVertices[Tet.Y],
-            TetMeshVertices[Tet.Z],
-            TetMeshVertices[Tet.W]
-        };
-        
-        float CurrentDistances[4] = {
-            DistanceToTriangle(HitPosition, Verts[0], Verts[1], Verts[2]), // ABC
-            DistanceToTriangle(HitPosition, Verts[0], Verts[1], Verts[3]), // ABD
-            DistanceToTriangle(HitPosition, Verts[0], Verts[2], Verts[3]), // ACD
-            DistanceToTriangle(HitPosition, Verts[1], Verts[2], Verts[3])  // BCD
-        };
-        
-        int32 LocalMinIndex = 0;
-        float LocalMinDist = CurrentDistances[0];
-
-        for (int32 j = 1; j < 4; ++j)
+        FTriangleSearchResult& LocalBest = ThreadResults[WorkerIndex];
+        for (int32 i = Begin; i < End; ++i)
         {
-            if (CurrentDistances[j] < LocalMinDist)
+            FTriangleSearchResult Local = ComputeLocalMinForTet(i, HitPosition);
+            if (Local.MinDistance < LocalBest.MinDistance)
             {
-                LocalMinDist = CurrentDistances[j];
-                LocalMinIndex = j;
+                LocalBest = Local;
             }
-        }
-
-        // [핵심 4] 스레드 로컬 결과 갱신 (동기화 없음)
-        if (LocalMinDist < LocalResult.MinDistance)
-        {
-            LocalResult.MinDistance = LocalMinDist;
-            LocalResult.TetIndex = i;
-            LocalResult.TriangleIndex = LocalMinIndex;
         }
     });
 
-    // [핵심 5] 최종 병합 (Reduction)
-    // 병렬 처리가 끝난 후, 메인 스레드에서 각 스레드의 결과를 취합합니다.
-    FThreadLocalResult FinalResult; 
-
-    for (const FThreadLocalResult& Result : ThreadResults)
+    // Reduction: 메인 스레드에서 모든 슬롯 취합
+    FTriangleSearchResult Final;
+    for (const FTriangleSearchResult& R : ThreadResults)
     {
-        if (Result.MinDistance < FinalResult.MinDistance)
+        if (R.MinDistance < Final.MinDistance)
         {
-            FinalResult = Result;
+            Final = R;
         }
     }
 
-    // 결과가 초기값 그대로라면(히트 실패 등), 예외 처리
-    if (FinalResult.TetIndex == -1)
+    if (Final.TetIndex == -1)
     {
         OutExcludedIndex = -1;
         return FInt32Vector4{ -1, 0, 0, 0 };
     }
 
-    // [핵심 6] 최종 결과 변환
-    // 삼각형 인덱스 매핑 테이블
-    static constexpr int32 TriangleIndices[4][3] = {
-        {1, 2, 3}, // 0: ABC
-        {1, 2, 4}, // 1: ABD
-        {1, 3, 4}, // 2: ACD
-        {2, 3, 4}  // 3: BCD
-    };
-    // 제외된 정점 인덱스 매핑 테이블 (각 삼각형에 포함되지 않은 정점)
-    static constexpr int32 ExcludedIndices[4] = {4, 3, 2, 1}; // D, C, B, A
-
-    FInt32Vector4 GlobalResult;
-    GlobalResult[0] = FinalResult.TetIndex;
-    GlobalResult[1] = TriangleIndices[FinalResult.TriangleIndex][0];
-    GlobalResult[2] = TriangleIndices[FinalResult.TriangleIndex][1];
-    GlobalResult[3] = TriangleIndices[FinalResult.TriangleIndex][2];
-    OutExcludedIndex = ExcludedIndices[FinalResult.TriangleIndex];
-
-    return GlobalResult;
+    return BuildSearchResult(Final, OutExcludedIndex);
 }
 
-float UFEMCalculateComponent::DistanceToTriangle(const FVector& OtherPoint, const FVector& PointA, const FVector& PointB, const FVector& PointC)
+float UFEMCalculateComponent::DistanceToTriangle(const FVector& OtherPoint, const FVector& PointA, const FVector& PointB, const FVector& PointC) const
 {
     // 삼각형의 두 에지 벡터
     FVector AB = PointB - PointA;
