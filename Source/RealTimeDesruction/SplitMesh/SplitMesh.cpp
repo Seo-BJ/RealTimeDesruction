@@ -220,8 +220,7 @@ TMap<uint32, TArray<FIntVector4>> SplitMesh::SplitTetra(const FIntVector4& tetra
 		uint32 NewIndexM23;
 
 		{
-			std::uniqu
-			e_lock<std::shared_mutex> lock(vertexMutex);
+			std::unique_lock<std::shared_mutex> lock(vertexMutex);
 			NewIndexM01 = NumVertices++;
 			NewIndexM02 = NumVertices++;
 			NewIndexM03 = NumVertices++;
@@ -480,6 +479,7 @@ TMap<uint32, UProceduralMeshComponent*> SplitMesh::Split()
 		uint32 Index = SeedArray[idx];
 		if (Vertices.Contains(Index) && Triangles.Contains(Index) && Meshes.Contains(Index))
 		{
+			Meshes[Index]->bUseComplexAsSimpleCollision = false;
 			Meshes[Index]->CreateMeshSection(
 				0,
 				Vertices.FindRef(Index),

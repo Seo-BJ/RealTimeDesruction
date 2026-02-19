@@ -4,7 +4,7 @@
 #include "../DistanceCalculate/DistanceCalculate.h"
 #include "ProceduralMeshComponent.h"
 #include <shared_mutex>
-#include "../TetMesh/FEMCalculateComponent.h"
+#include "../FEM/FEMCalculateComponent.h"
 
 // Not sure it is working...
 class REALTIMEDESRUCTION_API SplitMesh

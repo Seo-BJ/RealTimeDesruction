@@ -571,7 +571,7 @@ void UFEMCalculateComponent::KMatrixSequential()
         float Volume = GetTetVolume(Jaco);
 
         // B 행렬(변형률-변위 행렬) 생성
-        Matrix<float, 6, 12> MatrixB = BMatrix(Result)/ (Volume);
+        const Matrix<float, 6, 12> MatrixB = BMatrix(Result);
 
         // E 행렬(탄성 행렬) 생성
         Matrix<float, 6, 6> MatrixE = EMatrix();
@@ -622,7 +622,6 @@ void UFEMCalculateComponent::KMatrixParallel()
         // 각각 형상함수의 각 x, y, z 축에 대한 미분 행렬 계산
         const Matrix<float, 4, 3> Result = ShapeFunctionDiffMatrix * Jaco.inverse();
         const float Volume = GetTetVolume(Jaco);
-        // Matrix<float, 6, 12> MatrixB = BMatrix(Result) / (Volume);
         const Matrix<float, 6, 12> MatrixB = BMatrix(Result);
         const Matrix<float, 6, 6> MatrixE = EMatrix();
 
@@ -1019,14 +1018,14 @@ FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTetParallel_LockFree(
 
     // [핵심 6] 최종 결과 변환
     // 삼각형 인덱스 매핑 테이블
-    static const int32 TriangleIndices[4][3] = {
+    static constexpr int32 TriangleIndices[4][3] = {
         {1, 2, 3}, // 0: ABC
         {1, 2, 4}, // 1: ABD
         {1, 3, 4}, // 2: ACD
         {2, 3, 4}  // 3: BCD
     };
     // 제외된 정점 인덱스 매핑 테이블 (각 삼각형에 포함되지 않은 정점)
-    static const int32 ExcludedIndices[4] = {4, 3, 2, 1}; // D, C, B, A
+    static constexpr int32 ExcludedIndices[4] = {4, 3, 2, 1}; // D, C, B, A
 
     FInt32Vector4 GlobalResult;
     GlobalResult[0] = FinalResult.TetIndex;

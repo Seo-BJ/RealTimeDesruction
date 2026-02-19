@@ -12,6 +12,7 @@ ASplitActor::ASplitActor()
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
 	SetRootComponent(RootComponent);
 	RootComponent->SetMobility(EComponentMobility::Movable);
+	
 }
 
 // Called when the game starts or when spawned

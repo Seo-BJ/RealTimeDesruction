@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "../TetMesh/FEMCalculateComponent.h"
+#include "../FEM/FEMCalculateComponent.h"
 #include "../CVT/CVT.h"
 #include "../DistanceCalculate/DistanceCalculate.h"
 #include "../SplitMesh/SplitMesh.h"
@@ -68,21 +68,21 @@ private:
 			return InputArray;
 		}
 
-		// ¿øº» ¹è¿­ÀÇ ÀÎµ¦½º¸¦ ¼¯±â À§ÇÑ ¸®½ºÆ® »ý¼º
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½è¿­ï¿½ï¿½ ï¿½Îµï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 		TArray<int32> Indices;
 		for (int32 i = 0; i < InputArray.Num(); ++i)
 		{
 			Indices.Add(i);
 		}
 
-		// ÀÎµ¦½º ¹è¿­À» ¼¯±â
+		// ï¿½Îµï¿½ï¿½ï¿½ ï¿½è¿­ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		for (int32 i = Indices.Num() - 1; i > 0; --i)
 		{
 			int32 j = FMath::RandRange(0, i);
 			Indices.Swap(i, j);
 		}
 
-		// ¼¯ÀÎ ÀÎµ¦½º Áß¿¡¼­ NumElements¸¸Å­ ¼±ÅÃ
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½Îµï¿½ï¿½ï¿½ ï¿½ß¿ï¿½ï¿½ï¿½ NumElementsï¿½ï¿½Å­ ï¿½ï¿½ï¿½ï¿½
 		for (int32 i = 0; i < (int32)NumElements; ++i)
 		{
 			RandomElements.Add(InputArray[Indices[i]]);
