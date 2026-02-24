@@ -799,7 +799,6 @@ FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTetParallel_Mutex(
 FInt32Vector4 UFEMCalculateComponent::GetClosestTriangleAndTetParallel_LockFree(const FVector& HitPosition, int32& OutExcludedIndex)
 {
     // Worker 수만큼 슬롯을 미리 확보하고, 각 Worker가 담당 범위를 직접 순회
-    // → GetCurrentThreadIfKnown()의 enum 값 의존 없이 진정한 Lock-Free 보장
     const int32 NumWorkers = FTaskGraphInterface::Get().GetNumWorkerThreads();
     const int32 NumTets    = Tets.Num();
     const int32 ChunkSize  = FMath::DivideAndRoundUp(NumTets, NumWorkers);
